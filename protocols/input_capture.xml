@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="trindle_input_capture_v1">
+  <copyright>
+    Copyright 2026 the Trindle authors. GNU General Public License version 3
+    or later.
+  </copyright>
+
+  <description summary="share this computer's mouse and keyboard with another">
+    Lets a program take this computer's mouse and keyboard while the pointer
+    is over on another computer, as Flow does. Offered on the Wayland socket
+    of a plugin allowed "capture", and to programs outside every box.
+
+    The program names the side of the screens the other computer is on.
+    When the pointer is pushed against that side, past the edge, the
+    compositor hides the pointer, takes the pointer and keyboard from every
+    window, sends "activated", and then hands every movement, button, scroll
+    and key to the program until it sends "release", or until the
+    compositor ends it itself ("deactivated"): the screen locked, or the
+    person held Ctrl, Alt and Shift together for one second.
+
+    Version 2 adds two requests: "take", to cross at once without a push (so
+    the program can cross when the person asks it to, by a key), and
+    "set_mode", to turn pushing off so that crossing only ever happens
+    by "take". A compositor that offers only version 1 has neither.
+  </description>
+
+  <interface name="trindle_input_capture_manager_v1" version="2">
+    <description summary="where captures are asked for"/>
+
+    <request name="destroy" type="destructor">
+      <description summary="no more captures will be asked for"/>
+    </request>
+
+    <enum name="side">
+      <entry name="left" value="1"/>
+      <entry name="right" value="2"/>
+      <entry name="top" value="3"/>
+      <entry name="bottom" value="4"/>
+    </enum>
+
+    <request name="get_capture">
+      <description summary="cross to another computer at this side">
+        Asks for the pointer to cross at the given side. A program may hold
+        several captures at once, at most one for each side (up to four, for
+        up to four computers). A newer capture for a side takes the place of
+        an older one for that side only ("unavailable", taken, to the older);
+        arming one side never disarms another. Only one side is capturing at
+        a time: its events, and the program's release, come on the capture of
+        the side that crossed.
+      </description>
+      <arg name="id" type="new_id" interface="trindle_input_capture_v1"/>
+      <arg name="side" type="uint" enum="side"/>
+    </request>
+  </interface>
+
+  <interface name="trindle_input_capture_v1" version="2">
+    <description summary="one side the pointer may cross at"/>
+
+    <request name="destroy" type="destructor">
+      <description summary="stop; the mouse and keyboard come back if taken"/>
+    </request>
+
+    <request name="release">
+      <description summary="give the mouse and keyboard back">
+        The pointer comes back just inside the side it left by, at "along",
+        from 0 (the top or left end of that side) to 1 (the bottom or right
+        end). Ignored when not active.
+      </description>
+      <arg name="along" type="fixed"/>
+    </request>
+
+    <enum name="unavailable_reason">
+      <entry name="taken" value="2" summary="another capture took its place"/>
+      <entry name="not_now" value="3" since="2"
+             summary="a take was asked for when it cannot be: the screen is locked, a button is held, a question is showing, the mouse and keyboard are already taken, or too many takes were asked for in a second"/>
+      <entry name="not_asked" value="4" since="2"
+             summary="the person did not just ask for this: a program in a box may take only within five seconds of its own shortcut, ring item or ring icon being used, once"/>
+    </enum>
+
+    <enum name="mode" since="2">
+      <entry name="push" value="1" summary="a push against the armed side crosses (the default)"/>
+      <entry name="manual" value="2" summary="a push never crosses; only take does"/>
+    </enum>
+
+    <request name="take" since="2">
+      <description summary="cross now, as a push would">
+        Starts capturing at once, as a push against that side would have,
+        wherever the pointer is: the pointer is hidden where it is, the
+        windows are told the pointer and keyboard have gone, and everything
+        goes to the program until it releases. "side" is the side the other
+        computer is on, as in get_capture (1 left, 2 right, 3 top, 4 bottom);
+        "activated" follows, and a later release brings the pointer back just
+        inside that side, level with where it was. Refused with "unavailable"
+        when another capture has taken the place of this one (taken), and when it cannot
+        be done now (not_now), and for a program in a box that the person
+        has not just run by its own shortcut, ring item or ring icon (not_asked).
+        Not held back by the corner guard, which is for pushes.
+      </description>
+      <arg name="side" type="uint"/>
+    </request>
+
+    <request name="set_mode" since="2">
+      <description summary="whether pushing crosses, or only take does">
+        Applies to every capture of the program. A program starts in push
+        mode, and stays in the mode it set for as long as it holds a capture.
+      </description>
+      <arg name="mode" type="uint" enum="mode"/>
+    </request>
+
+    <event name="unavailable">
+      <description summary="the pointer will not cross at this side"/>
+      <arg name="reason" type="uint" enum="unavailable_reason"/>
+    </event>
+
+    <event name="ready">
+      <description summary="the side is armed; a push there crosses"/>
+    </event>
+
+    <event name="activated">
+      <description summary="the mouse and keyboard are now the program's">
+        "along" says where along the side the pointer left, from 0 to 1, as
+        in release.
+      </description>
+      <arg name="along" type="fixed"/>
+    </event>
+
+    <event name="motion">
+      <description summary="the pointer moved by this much, in the desktop's units"/>
+      <arg name="time" type="uint"/>
+      <arg name="dx" type="fixed"/>
+      <arg name="dy" type="fixed"/>
+    </event>
+
+    <event name="button">
+      <description summary="a button, by the kernel's number; state 1 pressed, 0 let go"/>
+      <arg name="time" type="uint"/>
+      <arg name="button" type="uint"/>
+      <arg name="state" type="uint"/>
+    </event>
+
+    <event name="axis">
+      <description summary="scrolling: axis 0 up and down, 1 across">
+        "value" is in the desktop's units, "v120" a wheel's clicks in 120ths,
+        or 0 when it gave none.
+      </description>
+      <arg name="time" type="uint"/>
+      <arg name="axis" type="uint"/>
+      <arg name="value" type="fixed"/>
+      <arg name="v120" type="int"/>
+    </event>
+
+    <event name="key">
+      <description summary="a key, by the kernel's number; state 1 pressed, 0 let go"/>
+      <arg name="time" type="uint"/>
+      <arg name="key" type="uint"/>
+      <arg name="state" type="uint"/>
+    </event>
+
+    <enum name="deactivated_reason">
+      <entry name="released" value="1" summary="the program asked"/>
+      <entry name="safety_keys" value="2" summary="Ctrl, Alt and Shift were held for a second"/>
+      <entry name="locked" value="3" summary="the screen locked"/>
+      <entry name="question" value="4" since="2"
+             summary="a question from Trindle itself came up, which only the person may answer"/>
+    </enum>
+
+    <event name="deactivated">
+      <description summary="the mouse and keyboard are this computer's again"/>
+      <arg name="reason" type="uint" enum="deactivated_reason"/>
+    </event>
+  </interface>
+</protocol>

@@ -1,0 +1,32 @@
+# What `cargo deny check` holds the dependencies to: licences that sit with
+# GPL-3.0-or-later, crates.io and the toolkit as the only sources, and no known vulnerability.
+
+[graph]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[advisories]
+unmaintained = "workspace"
+ignore = [
+    # The way out, time 0.3.47, needs Rust 1.88; Flow's floor is Debian 13's 1.85. See `.cargo/audit.toml`.
+    { id = "RUSTSEC-2026-0009", reason = "time comes only through rcgen, making Flow's own certificate from fixed dates; Flow never parses date text with it" },
+]
+
+[licenses]
+allow = [
+    "GPL-3.0-or-later",
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = ["https://github.com/trindle-os/trindle-toolkit"]

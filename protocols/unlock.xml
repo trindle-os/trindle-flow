@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="trindle_unlock_v1">
+  <description summary="unlock the lock screen with the PIN">
+    Offered only to the plugin Flow, from Trindle's own catalogue, through
+    its own box socket. Any other program neither sees this global nor is
+    answered if it somehow sends a request. The password cannot be given
+    here: only the PIN, under the limits the lock screen puts on it.
+  </description>
+
+  <interface name="trindle_unlock_v1" version="1">
+    <description summary="the one way Flow unlocks the screen">
+      The compositor checks the PIN itself and keeps count of wrong tries.
+    </description>
+
+    <request name="destroy" type="destructor">
+      <description summary="stop using this object"/>
+    </request>
+
+    <request name="with_pin">
+      <description summary="unlock the locked screen with the PIN">
+        Answered by done or by refused.
+      </description>
+      <arg name="pin" type="string" summary="the PIN"/>
+    </request>
+
+    <event name="done">
+      <description summary="the screen is unlocked"/>
+    </event>
+
+    <event name="refused">
+      <description summary="the screen was not unlocked, and why">
+        The reason is a few words, ready to show.
+      </description>
+      <arg name="reason" type="string" summary="why, in the fewest words"/>
+    </event>
+  </interface>
+</protocol>

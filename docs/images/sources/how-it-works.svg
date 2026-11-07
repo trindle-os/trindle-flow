@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360">
+  <rect width="1280" height="360" fill="#0b111d"/>
+  <rect x="48" y="48" width="344" height="264" rx="24" fill="#111827"/>
+  <circle cx="108" cy="112" r="30" fill="#fbc711"/>
+  <text x="108" y="124" text-anchor="middle" font-family="Trindle Sans, DejaVu Sans, sans-serif" font-size="34" font-weight="700" fill="#111827">1</text>
+  <text x="80" y="200" font-family="Trindle Sans, DejaVu Sans, sans-serif" font-size="34" font-weight="700" fill="#f4f6fb">Install on both</text>
+  <text x="80" y="244" font-family="Trindle Sans, DejaVu Sans, sans-serif" font-size="22" fill="#b8c0d0">Add Flow from Apps on</text>
+  <text x="80" y="274" font-family="Trindle Sans, DejaVu Sans, sans-serif" font-size="22" fill="#b8c0d0">each computer.</text>
+  <path d="M406 180h40M434 168l12 12-12 12" stroke="#fbc711" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <rect x="464" y="48" width="344" height="264" rx="24" fill="#111827"/>
+  <circle cx="524" cy="112" r="30" fill="#fbc711"/>
+  <text x="524" y="124" text-anchor="middle" font-family="Trindle Sans, DejaVu Sans, sans-serif" font-size="34" font-weight="700" fill="#111827">2</text>
+  <text x="496" y="200" font-family="Trindle Sans, DejaVu Sans, sans-serif" font-size="34" font-weight="700" fill="#f4f6fb">Pair them</text>
+  <text x="496" y="244" font-family="Trindle Sans, DejaVu Sans, sans-serif" font-size="22" fill="#b8c0d0">Type the four-digit number</text>
+  <text x="496" y="274" font-family="Trindle Sans, DejaVu Sans, sans-serif" font-size="22" fill="#b8c0d0">the other computer shows.</text>
+  <path d="M822 180h40M850 168l12 12-12 12" stroke="#fbc711" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <rect x="880" y="48" width="344" height="264" rx="24" fill="#111827"/>
+  <circle cx="940" cy="112" r="30" fill="#fbc711"/>
+  <text x="940" y="124" text-anchor="middle" font-family="Trindle Sans, DejaVu Sans, sans-serif" font-size="34" font-weight="700" fill="#111827">3</text>
+  <text x="912" y="200" font-family="Trindle Sans, DejaVu Sans, sans-serif" font-size="34" font-weight="700" fill="#f4f6fb">Push across</text>
+  <text x="912" y="244" font-family="Trindle Sans, DejaVu Sans, sans-serif" font-size="22" fill="#b8c0d0">The pointer and keyboard</text>
+  <text x="912" y="274" font-family="Trindle Sans, DejaVu Sans, sans-serif" font-size="22" fill="#b8c0d0">carry on over there.</text>
+</svg>
