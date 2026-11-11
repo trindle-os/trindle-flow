@@ -38,6 +38,15 @@ pub enum Side {
 impl Side {
     pub const ALL: [Side; 4] = [Side::Left, Side::Right, Side::Top, Side::Bottom];
 
+    pub fn opposite(self) -> Side {
+        match self {
+            Side::Right => Side::Left,
+            Side::Left => Side::Right,
+            Side::Bottom => Side::Top,
+            Side::Top => Side::Bottom,
+        }
+    }
+
     pub fn parse(text: &str) -> Option<Side> {
         match text.trim().to_lowercase().as_str() {
             "left" => Some(Side::Left),

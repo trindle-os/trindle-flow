@@ -11,7 +11,8 @@ plugin="$out/$id"
 
 cargo_home=${CARGO_HOME:-$HOME/.cargo}
 target="$root/target/shipped"
-export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$HOME=/home --remap-path-prefix=$(dirname "$root")=/src --remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$target=/target"
+RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$HOME=/home --remap-path-prefix=$(dirname "$root")=/src --remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$target=/target"
+export RUSTFLAGS
 locked=--locked
 if [ -f "$root/.cargo/config.toml" ] && grep -q '^\[patch' "$root/.cargo/config.toml"; then locked=; fi
 cargo +1.85 build --release --offline $locked --manifest-path "$root/Cargo.toml" --target-dir "$target"
@@ -31,6 +32,8 @@ install -d "$plugin/bin" "$plugin/icons"
 install -m 0755 "$target/release/flow" "$plugin/bin/flow"
 install -m 0644 "$here/icons/flow-ring.svg" "$plugin/icons/flow-ring.svg"
 install -m 0644 "$root/LICENSE" "$plugin/LICENSE"
+install -d "$plugin/share/licences"
+install -m 0644 "$root/share/licences/THIRD-PARTY.txt" "$plugin/share/licences/THIRD-PARTY.txt"
 
 cat > "$plugin/plugin.ini" <<INI
 [Plugin]

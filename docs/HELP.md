@@ -135,8 +135,9 @@ on both computers. Text and pictures up to 32 MB come across.
 
 **A file does not arrive.** Check that **Receive files copied on the other
 computer** is on. Up to 32 files come across from one copy, each up to
-100 MB; bigger files are left out. If the link drops part way, the file is
-said to be lost, the part that came is removed, and nothing is pasted.
+100 MB; bigger files are left out. No more than 4 GB comes across in an
+hour. If the link drops part way, the file is said to be lost, the part
+that came is removed, and nothing is pasted.
 
 **Unlocking says no.** The locked computer gives the reason:
 

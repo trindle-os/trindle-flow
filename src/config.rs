@@ -164,21 +164,34 @@ pub fn random_token() -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
-pub fn load() -> Config {
-    let mut cfg = defaults();
-    if let Ok(text) = fs::read_to_string(config_path()) {
-        match serde_json::from_str::<Value>(&text) {
-            Ok(Value::Object(saved)) => cfg.extend(saved),
-            _ => {
-                let bad = path("config.json.bad");
-                if fs::rename(config_path(), &bad).is_ok() {
-                    let said = format!("Flow's settings were damaged, so it starts afresh and the old ones are kept in {}. Pair the computers again.", bad.display());
-                    eprintln!("{said}");
-                    crate::page::tell("Flow", &said);
-                }
-            }
-        }
+fn read_saved() -> Result<Map<String, Value>, ()> {
+    let Ok(text) = fs::read_to_string(config_path()) else { return Ok(Map::new()) };
+    match serde_json::from_str::<Value>(&text) {
+        Ok(Value::Object(saved)) => Ok(saved),
+        _ => Err(()),
     }
+}
+
+pub fn load() -> Config {
+    let mut saved = read_saved();
+    let has_key = |s: &Result<Map<String, Value>, ()>| s.as_ref().is_ok_and(|m| m.get(key::TOKEN).and_then(Value::as_str).is_some_and(|t| !t.is_empty()));
+    // Anything that writes does so under the edit lock, and looks again once it has it.
+    let held = (!has_key(&saved)).then(edit_lock);
+    if held.is_some() {
+        saved = read_saved();
+    }
+    let saved = saved.unwrap_or_else(|()| {
+        // Damaged: set aside, not overwritten, so the pairings in it can still be read.
+        let bad = path("config.json.bad");
+        if fs::rename(config_path(), &bad).is_ok() {
+            let said = format!("Flow's settings were damaged, so it starts afresh and the old ones are kept in {}. Pair the computers again.", bad.display());
+            eprintln!("{said}");
+            crate::page::tell("Flow", &said);
+        }
+        Map::new()
+    });
+    let mut cfg = defaults();
+    cfg.extend(saved);
     let mut cfg = Config(cfg);
     if cfg.str(key::TOKEN).is_empty() {
         cfg.set(key::TOKEN, json!(random_token()));
@@ -192,14 +205,30 @@ pub fn write(name: &str, data: &[u8]) -> std::io::Result<()> {
     trindle_common::files::write_private(&path(name), data)
 }
 
-pub struct EditLock(#[allow(dead_code)] fs::File);
+pub struct EditLock(Option<fs::File>);
+
+thread_local! {
+    static HOLDING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+impl Drop for EditLock {
+    fn drop(&mut self) {
+        if self.0.is_some() {
+            HOLDING.set(false);
+        }
+    }
+}
 
 pub fn edit_lock() -> Option<EditLock> {
+    if HOLDING.get() {
+        return Some(EditLock(None));
+    }
     ensure_dir().ok()?;
     let f = fs::OpenOptions::new().write(true).create(true).truncate(false).mode(0o600).open(path("settings.lock")).ok()?;
     // SAFETY: flock on a descriptor this function owns and keeps open.
     let got = unsafe { libc::flock(std::os::fd::AsRawFd::as_raw_fd(&f), libc::LOCK_EX) } == 0;
-    got.then_some(EditLock(f))
+    HOLDING.set(got);
+    got.then_some(EditLock(Some(f)))
 }
 
 pub fn claim_running() -> Result<fs::File, String> {
@@ -211,11 +240,16 @@ pub fn claim_running() -> Result<fs::File, String> {
         .mode(0o600)
         .open(path("running.lock"))
         .map_err(|e| format!("could not start: {e}"))?;
-    // SAFETY: as above; the lock goes when the program ends.
-    if unsafe { libc::flock(std::os::fd::AsRawFd::as_raw_fd(&f), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
-        return Err("Flow is already running for you, so this second copy has stopped.".into());
+    // `flow tell` and the page ask whether Flow runs by taking this lock for
+    // a moment, so a start that meets one of them tries again for a second.
+    for _ in 0..20 {
+        // SAFETY: as above; the lock goes when the program ends.
+        if unsafe { libc::flock(std::os::fd::AsRawFd::as_raw_fd(&f), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+            return Ok(f);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
     }
-    Ok(f)
+    Err("Flow is already running for you, so this second copy has stopped.".into())
 }
 
 pub fn save(cfg: &Config) -> std::io::Result<()> {
@@ -257,6 +291,16 @@ pub fn now_secs() -> u64 {
 
 pub fn mtime() -> Option<SystemTime> {
     fs::metadata(config_path()).and_then(|m| m.modified()).ok()
+}
+
+pub type Stamp = (SystemTime, u64);
+
+pub fn stamp_of(path: &std::path::Path) -> Option<Stamp> {
+    fs::metadata(path).ok().and_then(|m| Some((m.modified().ok()?, m.len())))
+}
+
+pub fn stamp() -> Option<Stamp> {
+    stamp_of(&config_path())
 }
 
 #[cfg(test)]
@@ -322,6 +366,19 @@ pub mod tests {
         assert_ne!(cfg.str(key::TOKEN), "kept");
         assert!(fs::read_to_string(path("config.json.bad")).unwrap().contains("desk1"));
         assert_ne!(cfg.str(key::TOKEN), "");
+    }
+
+    #[test]
+    fn the_first_key_is_made_under_the_edit_lock_even_when_it_is_already_held() {
+        let _home = TestHome::new();
+        let held = edit_lock().unwrap();
+        let again = edit_lock().unwrap();
+        let token = load().str(key::TOKEN);
+        drop(again);
+        assert!(HOLDING.get());
+        drop(held);
+        assert!(!HOLDING.get());
+        assert_eq!(load().str(key::TOKEN), token);
     }
 
     #[test]

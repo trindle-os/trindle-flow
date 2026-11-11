@@ -28,12 +28,7 @@ impl Away {
     }
 
     fn home(&self) -> Side {
-        match self.side {
-            Side::Right => Side::Left,
-            Side::Left => Side::Right,
-            Side::Bottom => Side::Top,
-            Side::Top => Side::Bottom,
-        }
+        self.side.opposite()
     }
 
     pub(super) fn step(&mut self, dx: f64, dy: f64, now: f64) -> (Vec<Event>, bool) {

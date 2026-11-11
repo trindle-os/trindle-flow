@@ -1,5 +1,6 @@
 //! Who may connect: greeting a computer, checking its token or number, and joining it to the others.
 
+use std::collections::HashMap;
 use std::io::Write;
 use std::net::{IpAddr, SocketAddr, TcpStream};
 
@@ -13,26 +14,42 @@ const ACCEPT_RETRY: Duration = Duration::from_millis(200);
 const GREETING_TIME: Duration = Duration::from_secs(10);
 const GREETING_PER_ADDRESS: usize = 2;
 const GREETING_AT_ONCE: usize = 8;
+const SAID_PER_MINUTE: u32 = 3;
+const SAID_ADDRESSES: usize = 64;
 
 #[derive(Default)]
-struct Greeting(Mutex<Vec<IpAddr>>);
+struct Greeting {
+    now: Mutex<Vec<IpAddr>>,
+    said: Mutex<HashMap<IpAddr, (Instant, u32)>>,
+}
 
 struct GreetingPlace(Arc<Greeting>, IpAddr);
 
 impl Greeting {
     fn enter(self: &Arc<Self>, ip: IpAddr) -> Option<GreetingPlace> {
-        let mut now = lock(&self.0);
+        let mut now = lock(&self.now);
         if now.len() >= GREETING_AT_ONCE || now.iter().filter(|a| **a == ip).count() >= GREETING_PER_ADDRESS {
             return None;
         }
         now.push(ip);
         Some(GreetingPlace(self.clone(), ip))
     }
+
+    fn may_say(&self, ip: IpAddr) -> bool {
+        let mut said = lock(&self.said);
+        said.retain(|_, (t, _)| t.elapsed() < Duration::from_secs(60));
+        if said.len() >= SAID_ADDRESSES && !said.contains_key(&ip) {
+            return false;
+        }
+        let (_, n) = said.entry(ip).or_insert((Instant::now(), 0));
+        *n += 1;
+        *n <= SAID_PER_MINUTE
+    }
 }
 
 impl Drop for GreetingPlace {
     fn drop(&mut self) {
-        let mut now = lock(&self.0 .0);
+        let mut now = lock(&self.0.now);
         if let Some(i) = now.iter().position(|a| *a == self.1) {
             now.swap_remove(i);
         }
@@ -52,10 +69,13 @@ pub(super) fn accept_loop(me: Arc<Shared>, listener: TcpListener, tls_cfg: Arc<S
                     continue;
                 }
                 let Some(place) = greeting.enter(addr.ip()) else { continue };
-                let (me, tls_cfg) = (me.clone(), tls_cfg.clone());
+                let (me, tls_cfg, greeting) = (me.clone(), tls_cfg.clone(), greeting.clone());
                 std::thread::spawn(move || {
-                    if let Err(e) = greet(&me, tls_cfg, sock, addr, place) {
-                        (me.log)(format!("refused a connection from {}: {e}", addr.ip()));
+                    let loud = || greeting.may_say(addr.ip());
+                    if let Err(e) = greet(&me, tls_cfg, sock, addr, place, &loud) {
+                        if loud() {
+                            (me.log)(format!("refused a connection from {}: {e}", addr.ip()));
+                        }
                     }
                 });
             }
@@ -74,17 +94,22 @@ enum Way {
     Number(String),
 }
 
-fn read_hello(me: &Shared, stream: &mut tls::ServerStream, deadline: Instant) -> Result<Option<Hello>, String> {
+fn read_hello(me: &Shared, stream: &mut tls::ServerStream, deadline: Instant, loud: &dyn Fn() -> bool) -> Result<Option<Hello>, String> {
     let mut framer = Framer::for_hello();
     let Some((kind, body)) = tls::read_small(stream, &mut framer, deadline)? else { return Ok(None) };
     if kind != proto::HELLO {
         return Ok(None);
     }
     let hello: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
-    Ok(admit(me, &hello)?.map(|way| (hello, framer, way)))
+    Ok(admit(me, &hello, loud)?.map(|way| (hello, framer, way)))
 }
 
-fn admit(me: &Shared, hello: &Value) -> Result<Option<Way>, String> {
+fn admit(me: &Shared, hello: &Value, loud: &dyn Fn() -> bool) -> Result<Option<Way>, String> {
+    let say = |words: String| {
+        if loud() {
+            (me.log)(words);
+        }
+    };
     let id = clean_id(hello["id"].as_str().unwrap_or(""));
     if id.is_empty() {
         return Ok(None);
@@ -95,12 +120,12 @@ fn admit(me: &Shared, hello: &Value) -> Result<Option<Way>, String> {
         format!("{who} is running Flow {theirs} and this computer Flow {}. They cannot work together: update the older one.", env!("CARGO_PKG_VERSION"))
     };
     if hello["protocol"].as_i64().unwrap_or(1) != proto::VERSION {
-        (me.log)(older(&hello["version"]));
+        say(older(&hello["version"]));
         return Ok(None);
     }
     let dropped = me.cfg().0.get(key::DROPPED).and_then(Value::as_array).is_some_and(|d| d.iter().any(|v| v.as_str().map(clean_id).as_deref() == Some(id.as_str())));
     if dropped {
-        (me.log)(format!("refused {who}: disconnected from Flow's menu until Connect"));
+        say(format!("refused {who}: disconnected from Flow's menu until Connect"));
         return Ok(None);
     }
     if holds_token(&me.cfg(), &id, hello["token"].as_str().unwrap_or("")) {
@@ -108,16 +133,16 @@ fn admit(me: &Shared, hello: &Value) -> Result<Option<Way>, String> {
     }
     if hello["asks_to_pair"].as_bool() == Some(true) {
         if hello["pake"].as_str().is_none() {
-            (me.log)(older(&hello["version"]));
+            say(older(&hello["version"]));
             return Ok(None);
         }
         if let Some(code) = pairing::take_allowance(&id) {
             return Ok(Some(Way::Number(code)));
         }
-        me.asked(&id, &who);
+        me.asked(&id, &who, loud);
         return Ok(None);
     }
-    (me.log)(format!("refused {who}: not paired with this computer"));
+    say(format!("refused {who}: not paired with this computer"));
     Ok(None)
 }
 
@@ -164,11 +189,11 @@ fn number_matches(stream: &mut tls::ServerStream, framer: &mut Framer, hello: &V
     Ok(kind == proto::PAIR && agreed.fits(false, &pairing::unb64(&theirs["proof"])))
 }
 
-fn greet(me: &Arc<Shared>, tls_cfg: Arc<ServerConfig>, sock: TcpStream, addr: SocketAddr, place: GreetingPlace) -> Result<(), String> {
+fn greet(me: &Arc<Shared>, tls_cfg: Arc<ServerConfig>, sock: TcpStream, addr: SocketAddr, place: GreetingPlace, loud: &dyn Fn() -> bool) -> Result<(), String> {
     tls::tune(&sock);
     let deadline = Instant::now() + GREETING_TIME;
     let mut stream = handshake(tls_cfg, sock, deadline)?;
-    let Some((hello, mut framer, way)) = read_hello(me, &mut stream, deadline)? else { return Ok(()) };
+    let Some((hello, mut framer, way)) = read_hello(me, &mut stream, deadline, loud)? else { return Ok(()) };
     if let Way::Number(code) = way {
         if !paired(me, &mut stream, &mut framer, &hello, &code, deadline)? {
             return Ok(());
@@ -178,16 +203,11 @@ fn greet(me: &Arc<Shared>, tls_cfg: Arc<ServerConfig>, sock: TcpStream, addr: So
     drop(place);
 
     let ip = addr.ip().to_string();
-    let raw_id = match &hello["id"] {
-        Value::String(s) => s.clone(),
-        v => v.to_string(),
-    };
-    let id = clean_id(&raw_id);
-    if id.is_empty() {
-        return Err("it gave no usable name for itself".into());
-    }
+    // admit has already refused a greeting without a usable id.
+    let id = clean_id(hello["id"].as_str().unwrap_or(""));
     let name = clean_name(hello["name"].as_str().unwrap_or(""), &ip);
-    remember(me, &id, &name, &ip, hello["fingerprint"].as_str().unwrap_or(""));
+    let fingerprint = hello["fingerprint"].as_str().filter(|f| f.len() == 64 && f.bytes().all(|b| b.is_ascii_hexdigit())).unwrap_or("");
+    remember(me, &id, &name, &ip, fingerprint);
 
     let mut reply = proto::screens_json(&crate::screen::size(&me.cfg()));
     reply["token"] = json!(token_for(me, &id));
@@ -313,7 +333,9 @@ pub(super) fn arrived(me: &Shared, id: &str, link: &Arc<Link>, kind: u8, body: V
             clipboard::landed(me.clipboard.get().as_deref(), &me.log, Copied::Picture(body));
         }
         proto::FILE_BEGIN | proto::FILE_PIECE | proto::FILE_END | proto::FILE_ABORT if share => {
-            let _ = me.relay.send((id.to_string(), kind, body.clone()));
+            if kind != proto::FILE_PIECE || lock(&me.peers).iter().any(|p| p.id != id && p.link.alive()) {
+                let _ = me.relay.send((id.to_string(), kind, body.clone()));
+            }
             let batch = {
                 let mut all = lock(&me.receivers);
                 let r = all.entry(id.to_string()).or_insert_with(|| files::Receiver::new(me.log.clone()));
@@ -345,10 +367,10 @@ mod tests {
         let others: Vec<_> = (0..GREETING_AT_ONCE - 2).map(|_| g.enter(b).or_else(|| g.enter(IpAddr::from([192, 0, 2, 3])))).collect();
         assert!(others.iter().filter(|p| p.is_some()).count() <= GREETING_AT_ONCE - 2);
         let many: Vec<_> = (10..40u8).filter_map(|i| g.enter(IpAddr::from([192, 0, 2, i]))).collect();
-        assert_eq!(lock(&g.0).len(), GREETING_AT_ONCE);
+        assert_eq!(lock(&g.now).len(), GREETING_AT_ONCE);
         drop(many);
         drop(others);
-        assert_eq!(lock(&g.0).len(), 2);
+        assert_eq!(lock(&g.now).len(), 2);
     }
 
     fn pair_over_tls(typed: &str, shown: &str) -> (bool, bool) {
@@ -393,8 +415,17 @@ mod tests {
         assert_eq!(pair_over_tls("4821", "4812"), (false, false));
     }
 
+    #[test]
+    fn a_stranger_is_logged_only_a_few_times_a_minute() {
+        let greeting = Greeting::default();
+        let (a, b): (IpAddr, IpAddr) = ("192.168.1.66".parse().unwrap(), "192.168.1.20".parse().unwrap());
+        let said = (0..10).filter(|_| greeting.may_say(a)).count();
+        assert_eq!(said, SAID_PER_MINUTE as usize);
+        assert!(greeting.may_say(b));
+    }
+
     fn way(me: &Shared, hello: Value) -> String {
-        match admit(me, &hello).unwrap() {
+        match admit(me, &hello, &|| true).unwrap() {
             Some(Way::Token) => "token".into(),
             Some(Way::Number(code)) => format!("number {code}"),
             None => "refused".into(),

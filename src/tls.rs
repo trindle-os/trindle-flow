@@ -153,7 +153,7 @@ pub fn connect(host: &str, port: u16, timeout: std::time::Duration) -> Result<(C
     tune(&sock);
     sock.set_read_timeout(Some(timeout)).ok();
     sock.set_write_timeout(Some(timeout)).ok();
-    let name = ServerName::try_from("lmflow").map_err(|e| e.to_string())?.to_owned();
+    let name = ServerName::try_from(crate::discovery::MAGIC).map_err(|e| e.to_string())?.to_owned();
     let conn = ClientConnection::new(client_config()?, name).map_err(|e| e.to_string())?;
     let mut stream = StreamOwned::new(conn, sock);
     while stream.conn.is_handshaking() {
@@ -173,7 +173,7 @@ pub fn ensure_cert() -> Result<String, String> {
     let key = config::path("key.pem");
     if !(cert.exists() && key.exists()) {
         let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).map_err(|e| e.to_string())?;
-        params.distinguished_name.push(rcgen::DnType::CommonName, "lmflow");
+        params.distinguished_name.push(rcgen::DnType::CommonName, crate::discovery::MAGIC);
         params.not_before = rcgen::date_time_ymd(2024, 1, 1);
         params.not_after = rcgen::date_time_ymd(2099, 1, 1);
         let pair = rcgen::KeyPair::generate().map_err(|e| e.to_string())?;

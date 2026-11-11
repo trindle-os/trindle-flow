@@ -11,6 +11,7 @@ use serde_json::{json, Value};
 use crate::tls::hex;
 
 pub const PORT: u16 = 24811;
+/// The old name, kept in discovery and the certificate (tls.rs) so computers already paired keep finding and trusting each other.
 pub const MAGIC: &str = "lmflow";
 const INTERVAL: Duration = Duration::from_secs(2);
 const STALE_AFTER: Duration = Duration::from_secs(8);
@@ -209,6 +210,10 @@ fn send_quietly(sock: &UdpSocket, data: &[u8], to: Ipv4Addr) {
     }
 }
 
+fn until(last: Option<Instant>) -> Duration {
+    last.map_or(Duration::ZERO, |t| INTERVAL.saturating_sub(t.elapsed())).max(Duration::from_millis(20))
+}
+
 fn is_question(v: &Value) -> bool {
     v["app"] == MAGIC && v.get("q").is_some_and(|q| !q.is_null() && q != &json!(0) && q != &json!(false))
 }
@@ -227,7 +232,9 @@ fn note(found: &mut HashMap<String, (Value, Instant)>, mut msg: Value, from: Soc
         return false;
     }
     found.retain(|_, (_, t)| t.elapsed() < STALE_AFTER);
-    if found.len() >= MOST_FOUND && !found.contains_key(&id) {
+    // One entry per sender: anything nearby can answer with a paired computer's id.
+    let place = format!("{id}@{}", from.ip());
+    if found.len() >= MOST_FOUND && !found.contains_key(&place) {
         return false;
     }
     if let Some(name) = msg["name"].as_str() {
@@ -236,7 +243,7 @@ fn note(found: &mut HashMap<String, (Value, Instant)>, mut msg: Value, from: Soc
     if let SocketAddr::V4(v4) = from {
         msg["host"] = json!(v4.ip().to_string());
     }
-    found.insert(id, (msg, Instant::now()));
+    found.insert(place, (msg, Instant::now()));
     true
 }
 
@@ -259,7 +266,6 @@ impl Seeker {
                     return;
                 }
             };
-            let _ = sock.set_read_timeout(Some(Duration::from_millis(200)));
             let question = json!({"app": MAGIC, "q": 1}).to_string();
             let mut last_ask: Option<Instant> = None;
             let mut pending: Vec<Ipv4Addr> = Vec::new();
@@ -288,6 +294,8 @@ impl Seeker {
                         send_quietly(&sock, question.as_bytes(), a);
                     }
                 }
+                let wait = if pending.is_empty() { until(last_ask) } else { Duration::from_millis(200) };
+                let _ = sock.set_read_timeout(Some(wait));
                 let Ok((n, from)) = sock.recv_from(&mut buf) else { continue };
                 let Ok(msg) = serde_json::from_slice::<Value>(&buf[..n]) else { continue };
                 if let Ok(mut s) = found.lock() {
@@ -334,11 +342,11 @@ impl Responder {
                     return;
                 }
             };
-            let _ = sock.set_read_timeout(Some(Duration::from_millis(500)));
             let mut last_shout: Option<Instant> = None;
             let mut limit = ReplyLimit::default();
             let mut buf = [0u8; 4096];
             while !flag.load(Ordering::Relaxed) {
+                let _ = sock.set_read_timeout(Some(until(last_shout)));
                 if let Ok((n, from)) = sock.recv_from(&mut buf) {
                     let msg: Value = serde_json::from_slice(&buf[..n]).unwrap_or(Value::Null);
                     if is_question(&msg) && may_answer(from) && limit.allow(from.ip(), Instant::now()) {
@@ -402,8 +410,10 @@ mod tests {
         assert!(!note(&mut found, answer("bad|id\nrow", "x"), from, "me"));
         assert!(!note(&mut found, answer("me", "x"), from, "me"));
         assert!(note(&mut found, answer("desk1", "<b>Desk</b>|x"), from, "me"));
-        assert_eq!(found["desk1"].0["name"], "bDesk/bx");
-        assert_eq!(found["desk1"].0["host"], "192.0.2.9");
+        assert_eq!(found["desk1@192.0.2.9"].0["name"], "bDesk/bx");
+        assert_eq!(found["desk1@192.0.2.9"].0["host"], "192.0.2.9");
+        assert!(note(&mut found, answer("desk1", "Fake"), "192.0.2.66:24811".parse().unwrap(), "me"));
+        assert_eq!(found.len(), 2);
         for i in 0..100 {
             note(&mut found, answer(&format!("pc{i}"), "x"), from, "me");
         }

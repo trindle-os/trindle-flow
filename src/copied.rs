@@ -72,17 +72,18 @@ fn send_packet(fd: &OwnedFd, text: &str) -> Result<(), String> {
 fn receive(fd: &OwnedFd) -> Result<(String, Vec<OwnedFd>), String> {
     use std::os::fd::AsRawFd;
     let mut data = vec![0u8; 1 << 20];
-    let mut control = vec![0u8; 8192];
+    // u64s, so the buffer has the alignment cmsghdr needs when read through.
+    let mut control = vec![0u64; 1024];
     let mut iov = libc::iovec { iov_base: data.as_mut_ptr().cast(), iov_len: data.len() };
     // SAFETY: msghdr is filled with pointers to buffers that outlive the call,
-    // and every descriptor the kernel passes is wrapped at once so it is
+    // the control buffer is aligned for cmsghdr, and every descriptor the kernel passes is wrapped at once so it is
     // closed whatever happens next.
     unsafe {
         let mut msg: libc::msghdr = std::mem::zeroed();
         msg.msg_iov = &mut iov;
         msg.msg_iovlen = 1;
         msg.msg_control = control.as_mut_ptr().cast();
-        msg.msg_controllen = control.len() as _;
+        msg.msg_controllen = std::mem::size_of_val(control.as_slice()) as _;
         let got = libc::recvmsg(fd.as_raw_fd(), &mut msg, libc::MSG_CMSG_CLOEXEC);
         let mut fds = Vec::new();
         let mut c = libc::CMSG_FIRSTHDR(&msg);
@@ -247,12 +248,13 @@ mod tests {
                 let inner = pipe_with(b"inner!!");
                 let fds = [a.as_raw_fd(), inner.as_raw_fd(), b.as_raw_fd()];
                 let mut iov = libc::iovec { iov_base: packet.as_mut_ptr().cast(), iov_len: packet.len() };
-                let mut control = vec![0u8; libc::CMSG_SPACE(std::mem::size_of_val(&fds) as u32) as usize];
+                let space = libc::CMSG_SPACE(std::mem::size_of_val(&fds) as u32) as usize;
+                let mut control = vec![0u64; space.div_ceil(8)];
                 let mut msg: libc::msghdr = std::mem::zeroed();
                 msg.msg_iov = &mut iov;
                 msg.msg_iovlen = 1;
                 msg.msg_control = control.as_mut_ptr().cast();
-                msg.msg_controllen = control.len() as _;
+                msg.msg_controllen = space as _;
                 let h = libc::CMSG_FIRSTHDR(&msg);
                 (*h).cmsg_level = libc::SOL_SOCKET;
                 (*h).cmsg_type = libc::SCM_RIGHTS;

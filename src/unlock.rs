@@ -162,8 +162,12 @@ fn hand_over(id: &str, pin: &Pin) -> Result<Answer, String> {
     let mut stream = UnixStream::connect(config::path(SOCKET))
         .map_err(|_| "Flow is not running here, or this computer does not control the other one.".to_string())?;
     stream.set_read_timeout(Some(WAIT + Duration::from_secs(5))).map_err(|e| e.to_string())?;
-    let mut ask = json!({"id": id, "pin": pin.as_str()}).to_string().into_bytes();
-    ask.push(b'\n');
+    // Written by hand, so the only copy of the PIN is this buffer, which is wiped.
+    let id = json!(id).to_string();
+    let mut ask = Vec::with_capacity(id.len() + 32);
+    for part in [b"{\"id\":".as_slice(), id.as_bytes(), b",\"pin\":\"", pin.as_str().as_bytes(), b"\"}\n"] {
+        ask.extend_from_slice(part);
+    }
     let sent = stream.write_all(&ask);
     wipe_bytes(&mut ask);
     sent.map_err(|_| "Flow stopped before it could ask.".to_string())?;

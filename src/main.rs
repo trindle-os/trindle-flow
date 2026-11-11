@@ -55,8 +55,8 @@ fn stop_bell() -> &'static Bell {
 fn catch_stop() {
     stop_bell();
     for sig in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
-        // SAFETY: the handler only stores to an atomic, which is safe to do
-        // from a signal handler, and it lives for the whole program.
+        // SAFETY: the handler only stores to atomics and writes to an eventfd,
+        // both safe from a signal handler, and it lives for the whole program.
         unsafe {
             libc::signal(sig, on_signal as extern "C" fn(libc::c_int) as libc::sighandler_t);
         }
@@ -70,9 +70,9 @@ fn say() -> Log {
 const USAGE: &str = "Flow
 
   flow run            share or receive the mouse and keyboard, as settings say
-  flow settings       everything the Plugins page shows, as JSON
+  flow settings       print the settings, as JSON
   flow set KEY VALUE  change one setting
-  flow forget         unpair from the other computer
+  flow forget         unpair and make a new key
   flow allow ID       on the controlling computer: allow the computer asking to pair, with
                       the number it shows, read from standard input
   flow use ID         on the computer to be controlled: ask a computer Flow found to pair
@@ -85,7 +85,8 @@ const USAGE: &str = "Flow
   flow tell           how Flow is getting on, shown in the ring
   flow unlock [ID]    on the controlling computer: unlock that computer's screen with
                       the PIN, read from standard input; says the answer
-  flow version";
+  flow version        print the version
+  flow help           print this list";
 
 fn main() -> ExitCode {
     if config::find_dir().is_none() {

@@ -1,7 +1,7 @@
 <p align="center"><img src="docs/images/banner.png" alt="Flow: the Flow mark, the name, the words one mouse and keyboard for two computers, and the chips mouse and keyboard, clipboard and files" width="100%"></p>
 
 <p align="center">
-<img src="https://img.shields.io/badge/version-2.6.3-fbc711?style=flat-square&labelColor=111827" alt="Version 2.6.3">
+<img src="https://img.shields.io/badge/version-2.6.4-fbc711?style=flat-square&labelColor=111827" alt="Version 2.6.4">
 <img src="https://img.shields.io/badge/licence-GPL--3.0--or--later-8aa0c8?style=flat-square&labelColor=111827" alt="Licence GPL 3.0 or later">
 <img src="https://img.shields.io/badge/installed%20from-Trindle%20Apps-fbc711?style=flat-square&labelColor=111827" alt="Installed from Trindle Apps">
 <img src="https://img.shields.io/badge/cloud-none-8aa0c8?style=flat-square&labelColor=111827" alt="Cloud: none">
@@ -19,6 +19,8 @@ for a second always brings the mouse and keyboard home.
 
 The full help, with every setting and what to do when something goes
 wrong, is in [docs/HELP.md](docs/HELP.md).
+
+Comments are stripped from the published code to keep it lean.
 
 ## How it works
 
@@ -67,8 +69,8 @@ pasted.
 
 The controlling computer can unlock the other one's lock screen with your
 PIN, never the password. Flow asks for the PIN each time, carries it over
-its own link to the locked computer and nowhere else, and keeps it only
-while it is being tried. That computer's Trindle checks it and counts the
+its own link to the locked computer and nowhere else, and wipes its own
+copies once it has been tried, as far as it can. That computer's Trindle checks it and counts the
 tries: after five wrong ones only the password unlocks it. Choose "Unlock"
 and the computer's name in Flow's ring menu; Trindle shows the PIN box.
 

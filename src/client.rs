@@ -23,18 +23,11 @@ const SILENCE: Duration = Duration::from_secs(15);
 const PUBLISH_EVERY: Duration = Duration::from_secs(2);
 const LINKED_CHECK: Duration = Duration::from_secs(1);
 
-#[derive(Default)]
-struct Applied {
-    count: u64,
-    noted: Option<Instant>,
-}
-
 struct Shared {
     cfg: RwLock<Config>,
     log: Log,
     link: Mutex<Option<Arc<Link>>>,
     remote: Option<Remote>,
-    applied: Mutex<Applied>,
     receiver: Mutex<files::Receiver>,
     clipboard: clipboard::Watcher,
     identity_changed: AtomicBool,
@@ -86,7 +79,6 @@ pub fn run(running: Arc<AtomicBool>, log: Log) -> Result<(), crate::Stop> {
         log: log.clone(),
         link: Mutex::new(None),
         remote,
-        applied: Mutex::new(Applied::default()),
         receiver: Mutex::new(files::Receiver::new(log.clone())),
         clipboard,
         identity_changed: AtomicBool::new(false),
@@ -145,6 +137,7 @@ fn keep_published(me: &Arc<Shared>, seeker: &Arc<Option<Seeker>>, running: &Arc<
 }
 
 fn stay_linked(me: &Arc<Shared>, seeker: &Arc<Option<Seeker>>, running: &AtomicBool) -> Result<(), crate::Stop> {
+    let mut last_said = String::new();
     while running.load(Ordering::Relaxed) {
         if me.cfg().controls() {
             break;
@@ -160,8 +153,13 @@ fn stay_linked(me: &Arc<Shared>, seeker: &Arc<Option<Seeker>>, running: &AtomicB
             link.close();
         }
         if me.link().is_none() {
-            if let Err(e) = session(me, seeker.as_ref().as_ref()) {
-                (me.log)(format!("not connected ({e}); retrying"));
+            match session(me, seeker.as_ref().as_ref()) {
+                Err(e) if e != last_said => {
+                    (me.log)(format!("not connected ({e}); retrying"));
+                    last_said = e;
+                }
+                Err(_) => {}
+                Ok(()) => last_said.clear(),
             }
             publish(me, seeker.as_ref().as_ref());
         }
@@ -180,13 +178,13 @@ fn publish(me: &Shared, seeker: Option<&Seeker>) {
     let asking = (!cfg.str(key::ASKING).is_empty()).then(|| {
         json!({"name": cfg.str(key::SERVER_NAME), "number": cfg.str(key::PAIR_CODE)})
     });
-    let found: Vec<Value> = seeker
-        .map(|s| s.found(Some("server")))
-        .unwrap_or_default()
+    let mut found = seeker.map(|s| s.found(Some("server"))).unwrap_or_default();
+    let mut ids = std::collections::HashSet::new();
+    found.retain(|f| ids.insert(f["id"].to_string()));
+    let found: Vec<Value> = found
         .iter()
         .map(|f| {
-            json!({"id": f["id"], "name": f.get("name").unwrap_or(&f["host"]), "host": f["host"],
-})
+json!({"id": f["id"], "name": f.get("name").unwrap_or(&f["host"]), "host": f["host"]})
         })
         .collect();
     status::write(&json!({
@@ -203,23 +201,22 @@ fn publish(me: &Shared, seeker: Option<&Seeker>) {
     }));
 }
 
-fn find_host(cfg: &Config, seeker: Option<&Seeker>) -> Option<(String, u16)> {
-    let own = u16::try_from(cfg.i64(key::PORT)).ok()?;
+fn find_hosts(cfg: &Config, servers: &[Value]) -> Vec<(String, u16)> {
+    let Ok(own) = u16::try_from(cfg.i64(key::PORT)) else { return Vec::new() };
     let port = |v: &Value| v["port"].as_u64().and_then(|p| u16::try_from(p).ok()).unwrap_or(own);
-    if let Some(s) = seeker {
-        let servers = s.found(Some("server"));
-        let wanted = cfg.str(key::SERVER_ID);
-        if let Some(e) = servers.iter().find(|e| !wanted.is_empty() && e["id"] == wanted.as_str()) {
-            return Some((e["host"].as_str()?.to_string(), port(e)));
-        }
-        if wanted.is_empty() {
-            if let Some(e) = servers.first() {
-                return Some((e["host"].as_str()?.to_string(), port(e)));
-            }
+    let wanted = cfg.str(key::SERVER_ID);
+    let mut hosts: Vec<(String, u16)> = servers
+        .iter()
+        .filter(|e| if wanted.is_empty() { true } else { e["id"] == wanted.as_str() })
+        .take(if wanted.is_empty() { 1 } else { usize::MAX })
+        .filter_map(|e| Some((e["host"].as_str()?.to_string(), port(e))))
+        .collect();
+    for host in [cfg.str(key::ADDRESS), cfg.str(key::SERVER_HOST)] {
+        if !host.is_empty() && !hosts.iter().any(|(h, _)| *h == host) {
+            hosts.push((host, own));
         }
     }
-    let host = Some(cfg.str(key::ADDRESS)).filter(|a| !a.is_empty()).unwrap_or_else(|| cfg.str(key::SERVER_HOST));
-    (!host.is_empty()).then_some((host, own))
+    hosts
 }
 
 enum Greet {
@@ -243,11 +240,31 @@ fn greeting(cfg: &Config, actual: &str) -> Greet {
 }
 
 fn session(me: &Arc<Shared>, seeker: Option<&Seeker>) -> Result<(), String> {
-    let (host, port) = find_host(&me.cfg(), seeker).ok_or("no other machine found yet")?;
-    let (mut stream, actual) = tls::connect(&host, port, Duration::from_secs(10))?;
-    let asking = may_greet(me, seeker, &host, &actual)?;
-    let check = say_hello(me, &mut stream, &actual, asking)?;
-    let framer = hear_welcome(me, seeker, &mut stream, check, &host, &actual, asking)?;
+    let found = seeker.map(|s| s.found(Some("server"))).unwrap_or_default();
+    let hosts = find_hosts(&me.cfg(), &found);
+    let mut why = String::from("no other machine found yet");
+    for (i, (host, port)) in hosts.iter().enumerate() {
+        let (stream, actual) = match tls::connect(host, *port, Duration::from_secs(10)) {
+            Ok(c) => c,
+            Err(e) => {
+                why = e;
+                continue;
+            }
+        };
+        // A stranger answering with the paired id must not hide the real computer at the next address.
+        if i + 1 < hosts.len() && matches!(greeting(&me.cfg(), &actual), Greet::Changed) {
+            why = format!("{host} is not the computer paired");
+            continue;
+        }
+        return session_with(me, seeker, stream, host, &actual);
+    }
+    Err(why)
+}
+
+fn session_with(me: &Arc<Shared>, seeker: Option<&Seeker>, mut stream: tls::ClientStream, host: &str, actual: &str) -> Result<(), String> {
+    let asking = may_greet(me, seeker, host, actual)?;
+    let check = say_hello(me, &mut stream, actual, asking)?;
+    let framer = hear_welcome(me, seeker, &mut stream, check, host, actual, asking)?;
     start_link(me, stream, framer)?;
     (me.log)("connected".into());
     publish(me, seeker);
@@ -423,7 +440,8 @@ fn dispatch(me: &Shared, link: &Arc<Link>, kind: u8, body: Vec<u8>) {
         proto::ENTER => {
             let at: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
             if let (Some(x), Some(y), Some(remote)) = (at["x"].as_i64(), at["y"].as_i64(), &me.remote) {
-                remote.place(x as i32, y as i32, &screen::size(&me.cfg()));
+                let screens = screen::recent().unwrap_or_else(|| screen::fallback(&me.cfg()));
+                remote.place(x as i32, y as i32, &screens);
             }
         }
         proto::LEAVE => {
@@ -432,7 +450,8 @@ fn dispatch(me: &Shared, link: &Arc<Link>, kind: u8, body: Vec<u8>) {
             }
         }
         proto::PING => {
-            link.send(proto::pong(&screen::size(&me.cfg())), Urgency::Needed);
+            let screens = screen::recent().unwrap_or_else(|| screen::fallback(&me.cfg()));
+            link.send(proto::pong(&screens), Urgency::Needed);
         }
         proto::UNLOCK => unlock_asked(me, link, body),
         proto::CLIPBOARD if clip => {
@@ -483,27 +502,40 @@ fn replay(me: &Shared, events: &[Event]) {
     }
     let Some(remote) = &me.remote else { return };
     remote.emit(events);
-    let Ok(mut a) = me.applied.lock() else { return };
-    a.count += events.len() as u64;
-    if a.noted.is_none_or(|t| t.elapsed() > Duration::from_secs(5)) {
-        a.noted = Some(Instant::now());
-        (me.log)(format!("applied {} events so far", a.count));
-    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    fn hosts(cfg: &Config, found: &[Value]) -> Vec<String> {
+        find_hosts(cfg, found).into_iter().map(|(h, _)| h).collect()
+    }
+
     #[test]
     fn the_typed_address_comes_before_the_last_one_used() {
         let mut cfg = Config(config::defaults());
-        assert_eq!(find_host(&cfg, None), None);
+        assert!(hosts(&cfg, &[]).is_empty());
         cfg.set(key::SERVER_HOST, json!("192.168.1.20"));
-        assert_eq!(find_host(&cfg, None).unwrap().0, "192.168.1.20");
+        assert_eq!(hosts(&cfg, &[]), ["192.168.1.20"]);
         cfg.set(key::ADDRESS, json!("100.64.0.7"));
-        assert_eq!(find_host(&cfg, None).unwrap().0, "100.64.0.7");
+        assert_eq!(hosts(&cfg, &[]), ["100.64.0.7", "192.168.1.20"]);
     }
 
-    use super::*;
+    #[test]
+    fn a_stranger_using_the_paired_id_does_not_hide_the_real_computer() {
+        let mut cfg = Config(config::defaults());
+        cfg.set(key::SERVER_ID, json!("desk1"));
+        cfg.set(key::SERVER_HOST, json!("192.168.1.20"));
+        let found = [
+            json!({"id": "desk1", "host": "192.168.1.66"}),
+            json!({"id": "desk1", "host": "192.168.1.20"}),
+            json!({"id": "other", "host": "192.168.1.30"}),
+        ];
+        assert_eq!(hosts(&cfg, &found), ["192.168.1.66", "192.168.1.20"]);
+        cfg.set(key::SERVER_ID, json!(""));
+        assert_eq!(hosts(&cfg, &found[2..]), ["192.168.1.30", "192.168.1.20"]);
+    }
 
     #[test]
     fn the_token_goes_only_to_the_computer_pinned() {
@@ -528,7 +560,6 @@ mod tests {
             log: log.clone(),
             link: Mutex::new(None),
             remote: None,
-            applied: Mutex::new(Applied::default()),
             receiver: Mutex::new(files::Receiver::new(log.clone())),
             clipboard: clipboard::Watcher::new(mpsc::channel().0, &log),
             identity_changed: AtomicBool::new(false),

@@ -1507,7 +1507,7 @@ Same text as the one printed under: asn1-rs 0.7.2 (LICENSE-APACHE)
 Same text as the one printed under: cc 1.10.0 (LICENSE-MIT)
 
 ================================================================
-flow 2.6.3
+flow 2.6.4
 Licence: GPL-3.0-or-later
 Part of Trindle and Flow themselves.
 

@@ -101,12 +101,7 @@ impl Layout {
         let across_y = matches!(side, Side::Left | Side::Right);
         let (lo, hi) = if across_y { (y0, y1) } else { (x0, x1) };
         let want = (f64::from(lo) + along.clamp(0.0, 1.0) * f64::from((hi - lo - 1).max(0))).round();
-        let entry = match side {
-            Side::Right => Side::Left,
-            Side::Left => Side::Right,
-            Side::Bottom => Side::Top,
-            Side::Top => Side::Bottom,
-        };
+        let entry = side.opposite();
         let mut best: Option<(f64, i32, i32)> = None;
         for r in &self.0 {
             let (a0, a1) = if across_y { (r.y, r.y + r.h) } else { (r.x, r.x + r.w) };

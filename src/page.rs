@@ -35,6 +35,10 @@ fn plugin_file(name: &str) -> Option<PathBuf> {
     home().map(|h| h.join(name))
 }
 
+pub fn stamp() -> Option<config::Stamp> {
+    values_path().and_then(|p| config::stamp_of(&p))
+}
+
 fn read_values() -> Map<String, Value> {
     let Some(page) = values_path().and_then(|p| Ini::read(&p).ok()) else { return Map::new() };
     [CONTROLS, USE, ALLOW, NUMBER].iter().chain(SETTINGS).filter_map(|k| Some((k.to_string(), json!(page.get(SECTION, k)?)))).collect()

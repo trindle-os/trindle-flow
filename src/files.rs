@@ -7,6 +7,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
@@ -17,6 +18,8 @@ use crate::proto::{FILE_ABORT, FILE_BEGIN, FILE_END, FILE_PIECE};
 pub const CHUNK: usize = 128 * 1024;
 pub const MAX_FILES: usize = 32;
 pub const MAX_BYTES: u64 = 100 * 1024 * 1024;
+pub const MAX_PER_HOUR: u64 = 4 * 1024 * 1024 * 1024;
+const HOUR: Duration = Duration::from_secs(3600);
 
 pub fn downloads_folder() -> Option<PathBuf> {
     let home = trindle_common::files::home()?;
@@ -224,11 +227,12 @@ pub struct Receiver {
     batch: Vec<PathBuf>,
     passing: Vec<PathBuf>,
     spoiled: bool,
+    hour: (Instant, u64),
 }
 
 impl Receiver {
     pub fn new(log: Log) -> Receiver {
-        Receiver { log, open: HashMap::new(), batch: Vec::new(), passing: Vec::new(), spoiled: false }
+        Receiver { log, open: HashMap::new(), batch: Vec::new(), passing: Vec::new(), spoiled: false, hour: (Instant::now(), 0) }
     }
 
     pub fn begin(&mut self, body: &[u8], where_to: (PathBuf, bool)) {
@@ -256,6 +260,17 @@ impl Receiver {
             (self.log)("file: refused, too big or too many at once".into());
             return self.spoil(id);
         }
+        if self.hour.0.elapsed() > HOUR {
+            self.hour = (Instant::now(), 0);
+        }
+        if self.hour.1 + size > MAX_PER_HOUR {
+            if self.hour.1 <= MAX_PER_HOUR {
+                (self.log)("file: refused, 4 GB has already come in this hour".into());
+                self.hour.1 = MAX_PER_HOUR + 1;
+            }
+            return self.spoil(id);
+        }
+        self.hour.1 += size;
         let (folder, keep) = where_to;
         let made = std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&folder);
         let opened = made.and_then(|()| {
@@ -417,6 +432,29 @@ mod tests {
             }
         }
         landed
+    }
+
+    #[test]
+    fn no_more_than_four_gigabytes_come_in_an_hour() {
+        let dst = std::env::temp_dir().join(format!("flow-hour-{}", std::process::id()));
+        let said = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let log = said.clone();
+        let mut r = Receiver::new(Arc::new(move |m| log.lock().unwrap().push(m)));
+        r.hour.1 = MAX_PER_HOUR - 10;
+        let head = |id: u32, size: u64| json!({"id": id, "size": size, "name": "a.txt", "first": false}).to_string().into_bytes();
+        r.begin(&head(1, 10), (dst.clone(), true));
+        assert!(r.open.contains_key(&1));
+        r.begin(&head(2, 1), (dst.clone(), true));
+        r.begin(&head(3, 1), (dst.clone(), true));
+        assert!(!r.open.contains_key(&2) && !r.open.contains_key(&3));
+        assert_eq!(said.lock().unwrap().len(), 1);
+        if let Some(earlier) = Instant::now().checked_sub(HOUR + Duration::from_secs(1)) {
+            r.hour.0 = earlier;
+            r.begin(&head(4, 1), (dst.clone(), true));
+            assert!(r.open.contains_key(&4));
+        }
+        drop(r);
+        let _ = std::fs::remove_dir_all(dst);
     }
 
     #[test]

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.6.4 (11 November 2026)
+
+- Another machine on the network answering with the paired computer's name can no longer keep the two apart: each answer is kept by who sent it, and a stranger's certificate makes Flow try the typed address and the last one used.
+- A computer that is not paired is written to the log, and announced, at most three times a minute.
+- No more than 4 GB of copied files comes in within an hour, so the other computer cannot fill the disk.
+- While the other computer is off or unpaired, the controlled computer logs it once instead of every three seconds, and no longer counts events.
+- The plugin now carries the licences of the code built into it, in share/licences.
+- Less work while idle: the screens are looked up at most every ten seconds, the settings are read again only when they change, and looking for the other computer sleeps between questions.
+- A copy that loses its turn to a newer one part way is dropped without a word.
+- Flow starting at the same moment as `flow tell` no longer stops with "already running".
+
 ## 2.6.3 (5 November 2026)
 
 - Three settings that could only be changed by command are now on the settings page: the address of the other computer, looking for it on the local network, and the folder for received files. Switching the looking on or off restarts the link.

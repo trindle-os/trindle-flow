@@ -83,7 +83,7 @@ impl Shared {
         list.iter().map(|(_, v)| v.clone()).collect()
     }
 
-    fn asked(&self, id: &str, name: &str) {
+    fn asked(&self, id: &str, name: &str, loud: &dyn Fn() -> bool) {
         let new = {
             let mut list = lock(&self.asking);
             let asked = list.iter().find(|(_, v)| v["id"] == id).and_then(|(_, v)| v["asked"].as_u64());
@@ -99,7 +99,7 @@ impl Shared {
         let mut state = status::read();
         state[status::key::ASKING] = json!(self.asking_now());
         status::write(&state);
-        if new {
+        if new && loud() {
             (self.log)(format!("{name} asks to pair"));
             page::tell(
                 "Flow",
@@ -258,6 +258,8 @@ fn answer_seekers(me: &Arc<Shared>) -> Responder {
     )
 }
 
+type Stamps = (Option<config::Stamp>, Option<config::Stamp>);
+
 struct Server {
     me: Arc<Shared>,
     cfg: Config,
@@ -274,6 +276,7 @@ struct Server {
     waker: Sender<Wake>,
     started: Instant,
     last_ping: Option<Instant>,
+    files_seen: Option<(Stamps, Instant)>,
 }
 
 impl Server {
@@ -294,6 +297,7 @@ impl Server {
             waker,
             started: Instant::now(),
             last_ping: None,
+            files_seen: None,
         }
     }
 
@@ -327,7 +331,10 @@ impl Server {
     fn run_loop(&mut self, running: &AtomicBool) -> Result<(), crate::Stop> {
         let mut next_tick = Instant::now();
         while running.load(Ordering::Relaxed) {
-            self.arm();
+            // While the pointer is away every movement wakes this loop, so arming waits for the tick then.
+            if self.away.is_none() || Instant::now() >= next_tick {
+                self.arm();
+            }
             match self.wake.recv_timeout(next_tick.saturating_duration_since(Instant::now())) {
                 Ok(first) => {
                     self.woke(first);
@@ -606,6 +613,12 @@ impl Server {
     }
 
     fn reload_config(&mut self) -> bool {
+        let stamps = (page::stamp(), config::stamp());
+        // Read anyway now and then: a file written twice within the clock's step keeps its time.
+        if self.files_seen.as_ref().is_some_and(|(seen, at)| *seen == stamps && at.elapsed() < Duration::from_secs(10)) {
+            return false;
+        }
+        self.files_seen = Some((stamps, Instant::now()));
         page::take_and_tell(|m| self.log(m));
         let fresh = config::load();
         if fresh == self.cfg {
@@ -756,9 +769,9 @@ mod tests {
         let _home = crate::config::tests::TestHome::new();
         let (me, _) = shared(json!({}));
         for n in 0..20 {
-            me.asked(&format!("lap{n}"), "Laptop");
+            me.asked(&format!("lap{n}"), "Laptop", &|| true);
         }
-        me.asked("lap15", "Laptop");
+        me.asked("lap15", "Laptop", &|| true);
         let ids: Vec<String> = me.asking_now().iter().map(|v| v["id"].as_str().unwrap().to_string()).collect();
         assert_eq!(ids, ["lap12", "lap13", "lap14", "lap16", "lap17", "lap18", "lap19", "lap15"]);
     }

@@ -1,5 +1,8 @@
 //! Where the screens of this desktop are, in the units the pointer moves in.
 
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
 use wayland_client::globals::{registry_queue_init, GlobalListContents};
 use wayland_client::protocol::{wl_output, wl_registry};
 use wayland_client::{Connection, Dispatch, QueueHandle};
@@ -55,7 +58,22 @@ fn layout(found: &Found) -> Option<Layout> {
 }
 
 pub fn size(cfg: &Config) -> Layout {
-    detect().unwrap_or_else(|| Layout::single(cfg.i64(key::SCREEN_WIDTH) as i32, cfg.i64(key::SCREEN_HEIGHT) as i32))
+    detect().unwrap_or_else(|| fallback(cfg))
+}
+
+pub fn fallback(cfg: &Config) -> Layout {
+    Layout::single(cfg.i64(key::SCREEN_WIDTH) as i32, cfg.i64(key::SCREEN_HEIGHT) as i32)
+}
+
+pub fn recent() -> Option<Layout> {
+    static RECENT: Mutex<Option<(Instant, Layout)>> = Mutex::new(None);
+    let mut held = RECENT.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, layout)) = held.as_ref().filter(|(when, _)| when.elapsed() < Duration::from_secs(10)) {
+        return Some(layout.clone());
+    }
+    let found = detect()?;
+    *held = Some((Instant::now(), found.clone()));
+    Some(found)
 }
 
 impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for Found {
