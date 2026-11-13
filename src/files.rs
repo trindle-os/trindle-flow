@@ -142,7 +142,7 @@ impl Sender {
                 }
                 Err(Refused::Nothing) => {}
                 Err(why) => {
-                    log(format!("file: {}", why.message()));
+                    log(format!("Copied files not sent. {}", why.message()));
                     if !paths.is_empty() {
                         me.send(&paths);
                     }
@@ -253,11 +253,11 @@ impl Receiver {
             }
         }
         if self.open.contains_key(&id) {
-            (self.log)("file: refused, one with the same number is already arriving".into());
+            (self.log)("file: not accepted, because one with the same number is already arriving".into());
             return self.spoil(id);
         }
         if size > MAX_BYTES || self.open.len() >= MAX_FILES {
-            (self.log)("file: refused, too big or too many at once".into());
+            (self.log)("file: not accepted, because it is too big or there are too many at once".into());
             return self.spoil(id);
         }
         if self.hour.0.elapsed() > HOUR {
@@ -265,7 +265,7 @@ impl Receiver {
         }
         if self.hour.1 + size > MAX_PER_HOUR {
             if self.hour.1 <= MAX_PER_HOUR {
-                (self.log)("file: refused, 4 GB has already come in this hour".into());
+                (self.log)("file: not accepted, because 4 GB has already arrived this hour".into());
                 self.hour.1 = MAX_PER_HOUR + 1;
             }
             return self.spoil(id);
@@ -297,7 +297,7 @@ impl Receiver {
         let Some(entry) = self.open.get_mut(&id) else { return };
         entry.written += data.len() as u64;
         if entry.written > entry.expected {
-            (self.log)("file: more arrived than was promised, dropped".into());
+            (self.log)("file: more arrived than expected, so it was dropped".into());
             return self.spoil(id);
         }
         if let Err(e) = entry.file.write_all(data) {
@@ -308,7 +308,7 @@ impl Receiver {
 
     pub fn abort(&mut self, body: &[u8]) {
         let Some(id) = serde_json::from_slice::<Value>(body).ok().and_then(|h| u32::try_from(h["id"].as_u64()?).ok()) else { return };
-        (self.log)("file: the other computer stopped sending, dropped".into());
+        (self.log)("file: the other computer stopped sending, so it was dropped".into());
         self.spoil(id);
     }
 
@@ -319,7 +319,7 @@ impl Receiver {
         let name = entry.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         drop(entry.file);
         if entry.written != entry.expected {
-            (self.log)(format!("file: {name} arrived short, dropped"));
+            (self.log)(format!("file: {name} arrived incomplete, so it was dropped"));
             let _ = std::fs::remove_file(&entry.path);
             self.spoil(id);
             return None;

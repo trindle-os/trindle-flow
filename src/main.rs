@@ -69,24 +69,24 @@ fn say() -> Log {
 
 const USAGE: &str = "Flow
 
-  flow run            share or receive the mouse and keyboard, as settings say
-  flow settings       print the settings, as JSON
+  flow run            share or receive the mouse and keyboard, using your settings
+  flow settings       show the settings as JSON
   flow set KEY VALUE  change one setting
   flow forget         unpair and make a new key
-  flow allow ID       on the controlling computer: allow the computer asking to pair, with
-                      the number it shows, read from standard input
-  flow use ID         on the computer to be controlled: ask a computer Flow found to pair
-  flow goto ID        on the controlling computer: take the pointer over to that computer
-  flow switch         go to the other computer, or come back
+  flow allow ID       on the controlling computer: let a computer that is asking pair with
+                      this one. Give the number it shows on standard input
+  flow use ID         on the controlled computer: ask a computer Flow has found to pair
+  flow goto ID        on the controlling computer: move the pointer to that computer
+  flow switch         move to the other computer, or come back
   flow home           bring the pointer back to this computer
   flow drop ID        on the controlling computer: disconnect that computer
   flow connect        start sharing again after a disconnect
-  flow disconnect     stop sharing until connect, without unpairing
-  flow tell           how Flow is getting on, shown in the ring
-  flow unlock [ID]    on the controlling computer: unlock that computer's screen with
-                      the PIN, read from standard input; says the answer
-  flow version        print the version
-  flow help           print this list";
+  flow disconnect     stop sharing until you connect again, without unpairing
+  flow tell           show how Flow is getting on, in the ring
+  flow unlock [ID]    on the controlling computer: unlock that computer's screen. Give the
+                      PIN on standard input. Flow then tells you the result
+  flow version        show the version
+  flow help           show this list";
 
 fn main() -> ExitCode {
     if config::find_dir().is_none() {
@@ -118,19 +118,19 @@ fn command(args: &[String]) -> Result<(), String> {
         }
         "set" => match (arg(1), arg(2)) {
             (Some(k), Some(v)) => panel::set(k, v),
-            _ => Err("flow set KEY VALUE".into()),
+            _ => Err("Use it like this: flow set KEY VALUE".into()),
         },
         "forget" => panel::forget(),
         "allow" => match arg(1) {
             Some(id) => pairing::allow(id, &read_number()?).map(|()| page::ring_menu(&status::read())),
-            None => Err("flow allow ID".into()),
+            None => Err("Use it like this: flow allow ID".into()),
         },
         "use" => match arg(1) {
             Some(id) => pairing::use_found(id).map(|said| {
                 page::tell("Flow", &said);
                 println!("{said}");
             }),
-            None => Err("flow use ID".into()),
+            None => Err("Use it like this: flow use ID".into()),
         },
         "goto" | "switch" | "home" => {
             let which = arg(0).unwrap_or("home");
@@ -142,7 +142,7 @@ fn command(args: &[String]) -> Result<(), String> {
                 config::set_value(key::DROP_ID, serde_json::json!(id));
                 Ok(())
             }
-            None => Err("flow drop ID".into()),
+            None => Err("Use it like this: flow drop ID".into()),
         },
         "connect" => panel::set(key::CONNECTED, "on").map(|()| {
             config::set_value(key::DROPPED, serde_json::json!([]));
@@ -161,7 +161,7 @@ fn command(args: &[String]) -> Result<(), String> {
             println!("{USAGE}");
             Ok(())
         }
-        other => Err(format!("'{other}' is not something Flow knows how to do.\n\n{USAGE}")),
+        other => Err(format!("Flow does not know the command '{other}'.\n\n{USAGE}")),
     }
 }
 
@@ -283,13 +283,13 @@ fn supervise() {
         match worker.join() {
             Ok(Ok(())) => last_error.clear(),
             Ok(Err(Stop::Gone)) if page::installed() => {
-                log("the desktop went away: stopping, to be started afresh".into());
+                log("The desktop went away, so Flow is stopping to be started afresh.".into());
                 status::clear();
                 std::process::exit(3);
             }
             Ok(Err(e)) => {
                 let e = match e {
-                    Stop::Gone => "the desktop went away".to_string(),
+                    Stop::Gone => "The desktop went away.".to_string(),
                     Stop::Failed(e) => e,
                 };
                 if e != last_error {
@@ -299,7 +299,7 @@ fn supervise() {
                 pause(Duration::from_secs(3));
             }
             Err(_) => {
-                log("stopped unexpectedly, starting again".into());
+                log("Flow stopped unexpectedly and is starting again.".into());
                 pause(Duration::from_secs(3));
             }
         }

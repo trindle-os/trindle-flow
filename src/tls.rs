@@ -181,7 +181,7 @@ pub fn ensure_cert() -> Result<String, String> {
         config::write("key.pem", pair.serialize_pem().as_bytes()).map_err(|e| e.to_string())?;
         config::write("cert.pem", made.pem().as_bytes()).map_err(|e| e.to_string())?;
     }
-    let der = CertificateDer::from_pem_file(&cert).map_err(|e| format!("certificate unreadable: {e}"))?;
+    let der = CertificateDer::from_pem_file(&cert).map_err(|e| format!("Flow cannot read the certificate: {e}"))?;
     Ok(fingerprint(&der))
 }
 
@@ -191,7 +191,7 @@ pub fn server_config() -> Result<Arc<ServerConfig>, String> {
         .map_err(|e| e.to_string())?
         .filter_map(Result::ok)
         .collect();
-    let key = PrivateKeyDer::from_pem_file(config::path("key.pem")).map_err(|e| format!("key unreadable: {e}"))?;
+    let key = PrivateKeyDer::from_pem_file(config::path("key.pem")).map_err(|e| format!("Flow cannot read the key: {e}"))?;
     let cfg = ServerConfig::builder_with_provider(provider())
         .with_protocol_versions(VERSIONS)
         .map_err(|e| e.to_string())?

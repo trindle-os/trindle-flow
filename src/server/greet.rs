@@ -117,7 +117,7 @@ fn admit(me: &Shared, hello: &Value, loud: &dyn Fn() -> bool) -> Result<Option<W
     let who = clean_name(hello["name"].as_str().unwrap_or(""), "another computer");
     let older = |theirs: &Value| {
         let theirs: String = theirs.as_str().unwrap_or("an older version").chars().filter(|c| c.is_ascii_alphanumeric() || ".-+~".contains(*c)).take(24).collect();
-        format!("{who} is running Flow {theirs} and this computer Flow {}. They cannot work together: update the older one.", env!("CARGO_PKG_VERSION"))
+        format!("{who} is running Flow {theirs} and this computer is running Flow {}. They cannot work together, so update the older one.", env!("CARGO_PKG_VERSION"))
     };
     if hello["protocol"].as_i64().unwrap_or(1) != proto::VERSION {
         say(older(&hello["version"]));
@@ -234,7 +234,7 @@ fn paired(me: &Shared, stream: &mut tls::ServerStream, framer: &mut Framer, hell
     let who = clean_name(hello["name"].as_str().unwrap_or(""), "another computer");
     if !number_matches(stream, framer, hello, code, deadline)? {
         (me.log)(format!("refused {who}: the number typed here did not match the one it shows"));
-        page::tell("Flow", &format!("The number typed did not match the one {who} shows. Type it again."));
+        page::tell("Flow", &format!("The number you typed did not match the one {who} shows. Type it again."));
         return Ok(false);
     }
     lock(&me.asking).retain(|(_, v)| v["id"] != clean_id(hello["id"].as_str().unwrap_or("")).as_str());

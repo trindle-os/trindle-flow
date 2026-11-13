@@ -120,11 +120,11 @@ struct Listen(Tell);
 impl Captures {
     pub fn start(tell: Tell) -> Result<Captures, String> {
         let conn = Connection::connect_to_env().map_err(|_| "Flow cannot reach the desktop.".to_string())?;
-        let (globals, mut queue) = registry_queue_init::<Listen>(&conn).map_err(|e| format!("the desktop did not answer ({e})"))?;
+        let (globals, mut queue) = registry_queue_init::<Listen>(&conn).map_err(|e| format!("The desktop did not answer ({e})."))?;
         let qh = queue.handle();
         let manager: Manager = globals.bind(&qh, 1..=2, ()).map_err(|_| not_allowed())?;
         let mut listen = Listen(tell);
-        queue.roundtrip(&mut listen).map_err(|e| format!("the desktop did not answer ({e})"))?;
+        queue.roundtrip(&mut listen).map_err(|e| format!("The desktop did not answer ({e})."))?;
         let lost = Arc::new(AtomicBool::new(false));
         let gone = lost.clone();
         std::thread::Builder::new()

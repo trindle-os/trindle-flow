@@ -24,14 +24,14 @@ fn connect(path: &std::path::Path) -> Result<OwnedFd, String> {
     unsafe {
         let fd = libc::socket(libc::AF_UNIX, libc::SOCK_SEQPACKET | libc::SOCK_CLOEXEC, 0);
         if fd < 0 {
-            return Err("cannot make a socket to ask for the copied files".into());
+            return Err("Flow cannot make a socket to ask for the copied files.".into());
         }
         let owned = OwnedFd::from_raw_fd(fd);
         let mut addr: libc::sockaddr_un = std::mem::zeroed();
         addr.sun_family = libc::AF_UNIX as libc::sa_family_t;
         let bytes = path.as_os_str().as_bytes();
         if bytes.len() >= addr.sun_path.len() {
-            return Err("the copied files socket has too long a name".into());
+            return Err("The copied files socket has too long a name.".into());
         }
         for (i, b) in bytes.iter().enumerate() {
             addr.sun_path[i] = *b as libc::c_char;
@@ -50,7 +50,7 @@ fn connect(path: &std::path::Path) -> Result<OwnedFd, String> {
             std::mem::size_of::<libc::sockaddr_un>() as libc::socklen_t,
         );
         if rc != 0 {
-            return Err("Trindle did not answer when asked for the copied files".into());
+            return Err("Trindle did not answer when Flow asked for the copied files.".into());
         }
         Ok(owned)
     }
@@ -65,7 +65,7 @@ fn send_packet(fd: &OwnedFd, text: &str) -> Result<(), String> {
     if sent == packet.len() as isize {
         Ok(())
     } else {
-        Err("could not ask Trindle for the copied files".into())
+        Err("Flow could not ask Trindle for the copied files.".into())
     }
 }
 
@@ -98,12 +98,12 @@ fn receive(fd: &OwnedFd) -> Result<(String, Vec<OwnedFd>), String> {
             c = libc::CMSG_NXTHDR(&msg, c);
         }
         if got < 4 {
-            return Err("Trindle did not answer when asked for the copied files".into());
+            return Err("Trindle did not answer when Flow asked for the copied files.".into());
         }
         let got = got as usize;
         let len = u32::from_be_bytes([data[0], data[1], data[2], data[3]]) as usize;
         if len + 4 > got {
-            return Err("Trindle sent a broken answer about the copied files".into());
+            return Err("Trindle sent a broken answer about the copied files.".into());
         }
         Ok((String::from_utf8_lossy(&data[4..4 + len]).into_owned(), fds))
     }
@@ -141,13 +141,13 @@ impl Refused {
 fn why(code: &str) -> String {
     match code {
         "not_allowed" => "Flow has not been allowed to read the files you copy. Allow it in Settings, Permissions.",
-        "slow_down" => "files were copied twice within two seconds, so the second was not sent",
-        "unavailable" => "Trindle cannot hand over copied files just now",
-        "too_old" => "the files were copied too long ago to be sent",
-        "no_files" => "no files are copied",
-        "too_big" => "the files copied are too big to send",
-        "busy" => "Trindle is busy handing over other copied files",
-        _ => "Trindle did not understand Flow's request for the copied files",
+        "slow_down" => "Files were copied twice within two seconds, so the second copy was not sent.",
+        "unavailable" => "Trindle cannot hand over copied files just now.",
+        "too_old" => "The files were copied too long ago to be sent.",
+        "no_files" => "There are no copied files.",
+        "too_big" => "The copied files are too big to send.",
+        "busy" => "Trindle is busy handing over other copied files.",
+        _ => "Trindle did not understand Flow's request for the copied files.",
     }
     .to_string()
 }
@@ -171,7 +171,7 @@ pub fn fetch(path: &std::path::Path, log: &Log) -> Result<Vec<Copy>, Refused> {
             break;
         }
         if first != "FILES" {
-            return Err("Trindle sent a broken answer about the copied files".into());
+            return Err("Trindle sent a broken answer about the copied files.".into());
         }
         fds.reverse();
         for line in lines {
@@ -181,7 +181,7 @@ pub fn fetch(path: &std::path::Path, log: &Log) -> Result<Vec<Copy>, Refused> {
                 skipped += 1;
                 continue;
             }
-            let Some(taken) = fds.pop() else { return Err("Trindle sent fewer files than it listed".into()) };
+            let Some(taken) = fds.pop() else { return Err("Trindle sent fewer files than it listed.".into()) };
             let (Some(size), Some(rel)) = (size.and_then(|s| s.parse::<u64>().ok()), rel) else { continue };
             if rel.contains('/') || size > MAX_BYTES || out.len() >= MAX_FILES {
                 skipped += 1;

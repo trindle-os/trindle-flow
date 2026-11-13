@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.6.5 (13 November 2026)
+
+- Everything Flow says to you is rewritten in plain, everyday English: its messages, its settings, the command-line help, this README and the help page. Nothing Flow does has changed.
+- Four settings have shorter names: Cross only by shortcut or menu, Tailscale address of the other computer, Keep received files in Downloads/Flow, and Different folder for received files.
+
 ## 2.6.4 (11 November 2026)
 
 - Another machine on the network answering with the paired computer's name can no longer keep the two apart: each answer is kept by who sent it, and a stranger's certificate makes Flow try the typed address and the last one used.

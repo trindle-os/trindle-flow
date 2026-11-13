@@ -155,7 +155,7 @@ fn stay_linked(me: &Arc<Shared>, seeker: &Arc<Option<Seeker>>, running: &AtomicB
         if me.link().is_none() {
             match session(me, seeker.as_ref().as_ref()) {
                 Err(e) if e != last_said => {
-                    (me.log)(format!("not connected ({e}); retrying"));
+                    (me.log)(format!("Not connected: {e}{} Trying again.", if e.ends_with('.') { "" } else { "." }));
                     last_said = e;
                 }
                 Err(_) => {}
@@ -242,7 +242,7 @@ fn greeting(cfg: &Config, actual: &str) -> Greet {
 fn session(me: &Arc<Shared>, seeker: Option<&Seeker>) -> Result<(), String> {
     let found = seeker.map(|s| s.found(Some("server"))).unwrap_or_default();
     let hosts = find_hosts(&me.cfg(), &found);
-    let mut why = String::from("no other machine found yet");
+    let mut why = String::from("No other computer found yet.");
     for (i, (host, port)) in hosts.iter().enumerate() {
         let (stream, actual) = match tls::connect(host, *port, Duration::from_secs(10)) {
             Ok(c) => c,
@@ -253,7 +253,7 @@ fn session(me: &Arc<Shared>, seeker: Option<&Seeker>) -> Result<(), String> {
         };
         // A stranger answering with the paired id must not hide the real computer at the next address.
         if i + 1 < hosts.len() && matches!(greeting(&me.cfg(), &actual), Greet::Changed) {
-            why = format!("{host} is not the computer paired");
+            why = format!("{host} is not the computer you paired with.");
             continue;
         }
         return session_with(me, seeker, stream, host, &actual);
@@ -277,7 +277,7 @@ fn may_greet(me: &Shared, seeker: Option<&Seeker>, host: &str, actual: &str) -> 
     match greet {
         Greet::Ask => Ok(true),
         Greet::Token => Ok(false),
-        Greet::Unpaired => Err(format!("not paired with {host}: pick it in Flow's settings to pair")),
+        Greet::Unpaired => Err(format!("This computer is not paired with {host}. Pick it in Flow's settings to pair.")),
         Greet::Changed => {
             publish(me, seeker);
             let who = Some(me.cfg().str(key::SERVER_NAME)).filter(|n| !n.is_empty()).unwrap_or(host.to_string());
@@ -324,7 +324,7 @@ fn hear_welcome(
     actual: &str,
     asking: bool,
 ) -> Result<Framer, String> {
-    let refused = "the other machine has not been told to accept us. pick this computer in Flow's settings there";
+    let refused = "The other computer is not set to accept this one. There, open Flow's settings and pick this computer.";
     let deadline = Instant::now() + Duration::from_secs(10);
     let mut framer = Framer::for_hello();
     loop {
@@ -360,7 +360,7 @@ fn hear_welcome(
                 break;
             }
             (proto::HELLO, Some(_)) => {
-                return Err(format!("{host} runs an older Flow that cannot pair with this one: update Flow there"));
+                return Err(format!("{host} runs an older Flow that cannot pair with this one. Update Flow there."));
             }
             (_, c) => check = c,
         }
@@ -475,7 +475,7 @@ fn dispatch(me: &Shared, link: &Arc<Link>, kind: u8, body: Vec<u8>) {
 fn unlock_asked(me: &Shared, link: &Arc<Link>, mut body: Vec<u8>) {
     if UNLOCKING.swap(true, Ordering::AcqRel) {
         unlock::wipe_bytes(&mut body);
-        link.send(proto::pack_json(proto::UNLOCKED, &Answer::no("Another try is still running.").to_json()), Urgency::Needed);
+        link.send(proto::pack_json(proto::UNLOCKED, &Answer::no("Another unlock attempt is still running.").to_json()), Urgency::Needed);
         return;
     }
     let (link, log) = (link.clone(), me.log.clone());

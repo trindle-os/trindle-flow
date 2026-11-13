@@ -103,7 +103,7 @@ impl Shared {
             (self.log)(format!("{name} asks to pair"));
             page::tell(
                 "Flow",
-                &format!("{name} asks to be controlled by this computer. To allow it, pick it in Flow's settings, under Computer asking to be controlled, and type the number it shows."),
+                &format!("{name} asks to be controlled by this computer. To allow it, open Flow's settings, pick it under Computer asking to be controlled, and type the number it shows."),
             );
         }
     }
@@ -402,11 +402,11 @@ impl Server {
             live.contains(&who) && (id.is_empty() || who == id)
         });
         let Some((side, _)) = target else {
-            self.log("nobody connected to go to");
+            self.log("No computer is connected to go to.");
             return;
         };
         if !self.captures.as_ref().is_some_and(|c| c.take(side)) {
-            self.log("this desktop cannot hand over the mouse and keyboard on request: update Trindle");
+            self.log("This desktop cannot hand over the mouse and keyboard on request. Update Trindle.");
         }
     }
 

@@ -77,7 +77,7 @@ impl Agreed {
 
 pub fn allow_into(cfg: &mut config::Config, id: &str) -> Result<(), String> {
     if id.is_empty() || id.len() > 64 {
-        return Err("flow allow ID".into());
+        return Err("Use it like this: flow allow ID".into());
     }
     cfg.set(key::ALLOWED_ID, json!(id));
     cfg.set(key::ALLOWED_UNTIL, json!(config::now_secs() + ALLOW_SECONDS));
@@ -86,7 +86,7 @@ pub fn allow_into(cfg: &mut config::Config, id: &str) -> Result<(), String> {
 
 pub fn number_into(cfg: &mut config::Config, code: &str) -> Result<(), String> {
     if !is_code(code) {
-        return Err("The number is the four digits the other computer shows.".into());
+        return Err("Type the four digits the other computer shows.".into());
     }
     cfg.set(key::ALLOWED_CODE, json!(code));
     cfg.set(key::ALLOWED_UNTIL, json!(config::now_secs() + ALLOW_SECONDS));
@@ -98,7 +98,7 @@ pub fn allow(id: &str, code: &str) -> Result<(), String> {
     let mut cfg = config::load();
     allow_into(&mut cfg, id)?;
     number_into(&mut cfg, code)?;
-    config::save(&cfg).map_err(|e| format!("could not save the settings: {e}"))
+    config::save(&cfg).map_err(|e| format!("Flow could not save the settings: {e}"))
 }
 
 pub fn take_allowance(id: &str) -> Option<String> {
@@ -122,7 +122,7 @@ pub fn take_allowance(id: &str) -> Option<String> {
 pub fn use_into(cfg: &mut config::Config, id: &str) -> Result<String, String> {
     let found = crate::status::read()[crate::status::key::FOUND].as_array().cloned().unwrap_or_default();
     let Some(entry) = found.iter().find(|f| f["id"].as_str() == Some(id)) else {
-        return Err("That computer is not among those Flow has found. Check Flow is running on it and set to control.".into());
+        return Err("Flow has not found that computer. Check that Flow is running on it and set to control.".into());
     };
     let name = page::plain(entry["name"].as_str().unwrap_or("the other computer"), 40);
     let code = new_code()?;
@@ -142,7 +142,7 @@ pub fn use_found(id: &str) -> Result<String, String> {
     let _held = config::edit_lock();
     let mut cfg = config::load();
     let said = use_into(&mut cfg, id)?;
-    config::save(&cfg).map_err(|e| format!("could not save the settings: {e}"))?;
+    config::save(&cfg).map_err(|e| format!("Flow could not save the settings: {e}"))?;
     Ok(said)
 }
 
@@ -150,7 +150,7 @@ pub fn missed_into(cfg: &mut config::Config) -> String {
     let misses = cfg.i64(key::PAIR_MISSES) + 1;
     if misses < TRIES {
         cfg.set(key::PAIR_MISSES, json!(misses));
-        return "The number typed on the other computer did not match. Type it again there.".into();
+        return "The number you typed on the other computer did not match. Type it again there.".into();
     }
     let numbers = cfg.i64(key::PAIR_NUMBERS) + 1;
     let fresh = if numbers <= NUMBERS { new_code().ok() } else { None };
@@ -162,7 +162,7 @@ pub fn missed_into(cfg: &mut config::Config) -> String {
     cfg.set(key::PAIR_CODE, json!(code));
     cfg.set(key::PAIR_MISSES, json!(0));
     cfg.set(key::PAIR_NUMBERS, json!(numbers));
-    format!("Too many wrong numbers, so the number is now {code}. Type that on the other computer.")
+    format!("Too many wrong numbers, so the number has changed to {code}. Type that on the other computer.")
 }
 
 pub fn missed() -> (config::Config, String) {

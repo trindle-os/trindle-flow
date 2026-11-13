@@ -143,8 +143,8 @@ pub fn tell(summary: &str, body: &str) {
 
 pub fn identity_changed(who: &str) -> String {
     format!(
-        "{who} is not the computer it was: its identity has changed, usually because Flow was reinstalled there. \
-         Flow will not use it until the two are paired again: choose Use {who} in Flow's ring menu and type the number on {who}."
+        "{who} is not the computer it was. Its identity has changed, usually because Flow was reinstalled there. \
+         Flow will not use it until you pair the two again. Choose Use {who} in Flow's ring menu. Then type the number on {who}."
     )
 }
 
@@ -169,7 +169,7 @@ fn status_line(state: &Value) -> String {
     let who = plain(&Some(cfg.str(key::SERVER_NAME)).filter(|n| !n.is_empty()).unwrap_or(cfg.str(key::SERVER_HOST)), 40);
     let running = config::claim_running().is_err();
     let mut body = if !running {
-        "Flow is not running. Allow it to run from login in Settings, Permissions.".to_string()
+        "Flow is not running. In Settings, Permissions, allow it to run when you log in.".to_string()
     } else if state[status::key::CONNECTED].as_bool() == Some(true) {
         format!("Connected to {who}.")
     } else if state[status::key::IDENTITY_CHANGED].as_bool() == Some(true) {
@@ -177,14 +177,14 @@ fn status_line(state: &Value) -> String {
     } else if who.is_empty() {
         match state[status::key::FOUND].as_array().and_then(|f| f.first()).and_then(|f| f["name"].as_str()).map(|n| plain(n, 40)) {
             Some(name) => format!("Found {name}. Pick it in Flow's settings, under Computer that controls this one."),
-            None => "Looking for a computer to control this one. Set Flow on the other computer to control."
+            None => "Looking for a computer to control this one. On the other computer, set Flow to control."
                 .to_string(),
         }
     } else {
         format!("Looking for {who}.")
     };
     if running && state[status::key::CONTROL].as_bool() == Some(false) {
-        body.push_str(" Allow Flow to control your keyboard, mouse and clipboard in Settings, Permissions, so the other computer can use this one.");
+        body.push_str(" To let the other computer use this one, allow Flow to control your keyboard, mouse and clipboard in Settings, Permissions.");
     }
     body
 }
@@ -319,7 +319,7 @@ pub fn ring_menu(state: &Value) {
 fn controlling_status(state: &Value, cfg: &config::Config) -> String {
     let running = config::claim_running().is_err();
     if !running {
-        return "Flow is not running. Allow it to run from login in Settings, Permissions.".to_string();
+        return "Flow is not running. In Settings, Permissions, allow it to run when you log in.".to_string();
     }
     let side = crate::capture::Side::parse(&cfg.str(key::OTHER_SIDE)).unwrap_or(crate::capture::Side::Right);
     let asking = state[status::key::ASKING].as_array().and_then(|a| a.first());
@@ -330,12 +330,12 @@ fn controlling_status(state: &Value, cfg: &config::Config) -> String {
         )
     } else if state[status::key::CONNECTED].as_bool() == Some(true) {
         let who = plain(state[status::key::PEER_NAME].as_str().unwrap_or("the other computer"), 40);
-        format!("Connected to {who}. Push the pointer off the side of the screen {} to use it.", side.said_screen())
+        format!("Connected to {who}. To use it, push the pointer off the side of the screen {}.", side.said_screen())
     } else {
-        "Waiting for the other computer. In Flow's settings there, pick this computer.".to_string()
+        "Waiting for the other computer. There, open Flow's settings and pick this computer.".to_string()
     };
     if state[status::key::CAN_CROSS].as_bool() == Some(false) {
-        body.push_str(" Allow Flow to share your mouse and keyboard with another computer in Settings, Permissions, so the pointer can cross.");
+        body.push_str(" To let the pointer cross, allow Flow to share your mouse and keyboard with another computer in Settings, Permissions.");
     }
     body
 }

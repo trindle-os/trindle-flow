@@ -93,7 +93,7 @@ fn check(kind: &Kind, text: &str) -> Result<Value, String> {
             if text.is_empty() || (text.starts_with('/') && !text.contains('\0')) {
                 Ok(json!(text))
             } else {
-                Err("a full folder path starting with /, or nothing for Downloads/Flow".into())
+                Err("a full folder path starting with /, or empty for Downloads/Flow".into())
             }
         }
     }
@@ -104,21 +104,21 @@ pub fn set(key: &str, text: &str) -> Result<(), String> {
     let _held = config::edit_lock();
     let mut cfg = config::load();
     cfg.set(key, value);
-    config::save(&cfg).map_err(|e| format!("could not save the settings: {e}"))
+    config::save(&cfg).map_err(|e| format!("Flow could not save the settings: {e}"))
 }
 
 pub fn checked(key: &str, text: &str) -> Result<Value, String> {
     let Some((_, kind)) = EDITABLE.iter().find(|(k, _)| *k == key) else {
-        return Err(format!("'{key}' is not a setting Flow has"));
+        return Err(format!("Flow has no setting called '{key}'."));
     };
-    check(kind, text).map_err(|want| format!("{key} needs {want}"))
+    check(kind, text).map_err(|want| format!("{key} must be {want}."))
 }
 
 pub fn forget() -> Result<(), String> {
     let _held = config::edit_lock();
     let mut cfg = config::load();
     crate::pairing::unpair_into(&mut cfg);
-    config::save(&cfg).map_err(|e| format!("could not save the settings: {e}"))
+    config::save(&cfg).map_err(|e| format!("Flow could not save the settings: {e}"))
 }
 
 #[cfg(test)]

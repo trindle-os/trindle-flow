@@ -109,16 +109,16 @@ pub fn with_pin(pin: &Pin) -> Answer {
 
 fn try_with_pin(pin: &Pin) -> Result<Answer, String> {
     let conn = Connection::connect_to_env().map_err(|_| "Flow cannot reach the desktop.".to_string())?;
-    let (globals, mut queue) = registry_queue_init::<Heard>(&conn).map_err(|e| format!("the desktop did not answer ({e})"))?;
+    let (globals, mut queue) = registry_queue_init::<Heard>(&conn).map_err(|e| format!("The desktop did not answer ({e})."))?;
     let qh = queue.handle();
     let unlock: TrindleUnlockV1 = globals
         .bind(&qh, 1..=1, ())
-        .map_err(|_| "This computer's Trindle does not let Flow unlock it. Update Trindle, and install Flow from Apps.".to_string())?;
+        .map_err(|_| "Flow cannot unlock this computer with this version of Trindle. Update Trindle, then install Flow from Apps.".to_string())?;
     let mut heard = Heard(None);
     unlock.with_pin(pin.as_str().to_string());
     let began = Instant::now();
     while heard.0.is_none() && began.elapsed() < WAIT {
-        queue.roundtrip(&mut heard).map_err(|e| format!("the desktop did not answer ({e})"))?;
+        queue.roundtrip(&mut heard).map_err(|e| format!("The desktop did not answer ({e})."))?;
         if heard.0.is_none() {
             std::thread::sleep(Duration::from_millis(50));
         }

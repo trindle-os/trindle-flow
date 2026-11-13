@@ -9,7 +9,7 @@ use std::time::SystemTime;
 use base64::Engine;
 use serde_json::{json, Map, Value};
 
-pub const NO_FOLDER: &str = "Flow cannot tell where to keep its settings: set HOME or XDG_CONFIG_HOME to a full path.";
+pub const NO_FOLDER: &str = "Flow cannot find a place to keep its settings. Set HOME or XDG_CONFIG_HOME to a full path.";
 
 pub fn find_dir() -> Option<PathBuf> {
     match std::env::var_os("FLOW_CONFIG_DIR").filter(|d| !d.is_empty()) {
@@ -184,7 +184,7 @@ pub fn load() -> Config {
         // Damaged: set aside, not overwritten, so the pairings in it can still be read.
         let bad = path("config.json.bad");
         if fs::rename(config_path(), &bad).is_ok() {
-            let said = format!("Flow's settings were damaged, so it starts afresh and the old ones are kept in {}. Pair the computers again.", bad.display());
+            let said = format!("Flow's settings were damaged. It has started afresh and saved the old ones in {}. Pair the computers again.", bad.display());
             eprintln!("{said}");
             crate::page::tell("Flow", &said);
         }
@@ -232,14 +232,14 @@ pub fn edit_lock() -> Option<EditLock> {
 }
 
 pub fn claim_running() -> Result<fs::File, String> {
-    ensure_dir().map_err(|e| format!("could not make the settings folder: {e}"))?;
+    ensure_dir().map_err(|e| format!("Flow could not make the settings folder: {e}"))?;
     let f = fs::OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(false)
         .mode(0o600)
         .open(path("running.lock"))
-        .map_err(|e| format!("could not start: {e}"))?;
+        .map_err(|e| format!("Flow could not start: {e}"))?;
     // `flow tell` and the page ask whether Flow runs by taking this lock for
     // a moment, so a start that meets one of them tries again for a second.
     for _ in 0..20 {

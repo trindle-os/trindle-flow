@@ -49,7 +49,7 @@ struct Setup {
 impl Remote {
     pub fn start() -> Result<Remote, String> {
         let conn = Connection::connect_to_env().map_err(|_| "Flow cannot reach the desktop.".to_string())?;
-        let (globals, mut queue) = registry_queue_init::<Setup>(&conn).map_err(|e| format!("the desktop did not answer ({e})"))?;
+        let (globals, mut queue) = registry_queue_init::<Setup>(&conn).map_err(|e| format!("The desktop did not answer ({e})."))?;
         let qh = queue.handle();
         let pointers: ZwlrVirtualPointerManagerV1 = globals.bind(&qh, 1..=2, ()).map_err(|_| not_allowed())?;
         let keyboards: ZwpVirtualKeyboardManagerV1 = globals.bind(&qh, 1..=1, ()).map_err(|_| not_allowed())?;
@@ -61,7 +61,7 @@ impl Remote {
             if setup.keymap.is_some() {
                 break;
             }
-            queue.roundtrip(&mut setup).map_err(|e| format!("the desktop did not answer ({e})"))?;
+            queue.roundtrip(&mut setup).map_err(|e| format!("The desktop did not answer ({e})."))?;
         }
         let (format, fd, size) = setup.keymap.take().ok_or("The desktop gave no keyboard layout.")?;
         if format != XKB_V1 {
@@ -73,7 +73,7 @@ impl Remote {
         if real.version() >= 3 {
             real.release();
         }
-        queue.roundtrip(&mut setup).map_err(|e| format!("the desktop did not answer ({e})"))?;
+        queue.roundtrip(&mut setup).map_err(|e| format!("The desktop did not answer ({e})."))?;
 
         let lost = Arc::new(AtomicBool::new(false));
         let gone = lost.clone();

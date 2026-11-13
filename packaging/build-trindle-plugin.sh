@@ -113,7 +113,7 @@ Default=Right
 [Field shortcut_only]
 ShowWhen=controls=true
 Kind=switch
-Label=Cross only by shortcut or menu, not by pushing
+Label=Cross only by shortcut or menu
 Default=false
 
 [Field left_computer]
@@ -150,7 +150,7 @@ Default=Normal
 [Field address]
 ShowWhen=controls=false
 Kind=text
-Label=Address of the other computer, for Tailscale
+Label=Tailscale address of the other computer
 
 [Field discovery]
 Kind=switch
@@ -169,13 +169,13 @@ Default=true
 
 [Field files_keep]
 Kind=switch
-Label=Keep received files in Downloads, Flow
+Label=Keep received files in Downloads/Flow
 Default=true
 
 [Field files_folder]
 ShowWhen=files_keep=true
 Kind=text
-Label=Folder for received files, if not Downloads
+Label=Different folder for received files
 
 [Background]
 Run=bin/flow run
@@ -183,7 +183,7 @@ INI
 
 install -m 0644 "$here/icons/flow.svg" "$out/$id.svg"
 cat > "$out/$id.description.txt" <<TXT
-Flow lets one computer's mouse and keyboard work another computer on your network. Install it on both. On the one whose mouse and keyboard you will use, switch on "This computer controls the other one" in Flow's settings and say which side the other computer is on. On the other, Flow lists the computers it has found: pick the controlling one and it shows a four-digit number; on the controlling one, pick the computer asking and type that number. From then on they find each other by themselves, over an encrypted link that trusts only the paired computer. Push the pointer off that side of the screen and it carries on on the other computer, with the keyboard following; push it back to come home. What you copy on one can be pasted on the other, and copied files arrive in Downloads, in a Flow folder.
+Flow lets the mouse and keyboard of one computer work another computer on your network. Install it on both. On the computer whose mouse and keyboard you will use, open Flow's settings and switch on "This computer controls the other one". Then say which side the other computer is on. On the other computer, Flow lists the computers it has found. Pick the controlling one and Flow shows a four-digit number. On the controlling computer, pick the computer that is asking and type that number. After that, the two computers find each other by themselves. The link is encrypted and trusts only the paired computer. Push the pointer off that side of the screen and it continues on the other computer, and the keyboard follows. Push it back to come home. What you copy on one computer can be pasted on the other. Copied files arrive in Downloads, in a Flow folder.
 TXT
 tar --zstd -cf "$out/$id.tar.zst" -C "$out" "$id"
 echo "$plugin"
