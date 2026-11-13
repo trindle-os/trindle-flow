@@ -1,7 +1,7 @@
 <p align="center"><img src="docs/images/banner.png" alt="Flow: the Flow mark, the name, the words one mouse and keyboard for two computers, and the chips mouse and keyboard, clipboard and files" width="100%"></p>
 
 <p align="center">
-<img src="https://img.shields.io/badge/version-2.6.5-fbc711?style=flat-square&labelColor=111827" alt="Version 2.6.5">
+<img src="https://img.shields.io/badge/version-2.6.6-fbc711?style=flat-square&labelColor=111827" alt="Version 2.6.6">
 <img src="https://img.shields.io/badge/licence-GPL--3.0--or--later-8aa0c8?style=flat-square&labelColor=111827" alt="Licence GPL 3.0 or later">
 <img src="https://img.shields.io/badge/installed%20from-Trindle%20Apps-fbc711?style=flat-square&labelColor=111827" alt="Installed from Trindle Apps">
 <img src="https://img.shields.io/badge/cloud-none-8aa0c8?style=flat-square&labelColor=111827" alt="Cloud: none">

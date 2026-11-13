@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.6.6 (13 November 2026)
+
+- rustix, a library Flow uses through its Wayland connection, is updated to 1.1.6 for a fault in functions Flow never calls (RUSTSEC-2026-0486).
+
 ## 2.6.5 (13 November 2026)
 
 - Everything Flow says to you is rewritten in plain, everyday English: its messages, its settings, the command-line help, this README and the help page. Nothing Flow does has changed.
