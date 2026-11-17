@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.6.7 (15 November 2026)
+
+- Fixed: on a computer where nothing had been copied since Flow started, the first thing you copied was never sent to the other computer. Copying on the other computer first, then pasting here, made it work. Now the first copy is sent.
+
 ## 2.6.6 (13 November 2026)
 
 - rustix, a library Flow uses through its Wayland connection, is updated to 1.1.6 for a fault in functions Flow never calls (RUSTSEC-2026-0486).

@@ -375,6 +375,13 @@ impl Worker {
         };
         let dev = mgr.get_data_device(&seat, &qh, ());
         let mut state = State { tx: Some(self.tx.clone()), wake: self.wake.try_clone().ok(), ..State::default() };
+        // Whatever the desktop reports before this round trip ends was copied before
+        // we started. Some desktops send nothing when the clipboard is empty, so
+        // counting events would take the first real copy for the old one.
+        if let Err(e) = queue.roundtrip(&mut state) {
+            return Ended::Lost(format!("the desktop did not answer ({e})"));
+        }
+        state.settled = true;
         self.set_route("from the desktop itself (data-control)");
         (self.log)("clipboard: watching the desktop's clipboard".into());
 
@@ -512,10 +519,14 @@ struct State {
     types: HashMap<ObjectId, Vec<String>>,
     current: Option<offer::ZwlrDataControlOfferV1>,
     finished: bool,
-    selections: u32,
+    settled: bool,
 }
 
 impl State {
+    fn is_seed(&self) -> bool {
+        !self.settled
+    }
+
     fn note(&self, text: String) {
         if let Some(tx) = &self.tx {
             let _ = tx.send(Msg::Note(text));
@@ -527,7 +538,7 @@ impl State {
 
     fn fetch(&mut self, conn: &Connection, of: &offer::ZwlrDataControlOfferV1) {
         let types = self.types.get(&of.id()).cloned().unwrap_or_default();
-        let seed = self.selections == 1;
+        let seed = self.is_seed();
         let Some(mime) = choose(&types) else {
             if !seed && !types.iter().any(|t| t == SECRET_HINT) {
                 let kinds: Vec<&str> = types.iter().map(String::as_str).take(12).collect();
@@ -597,7 +608,6 @@ impl Dispatch<device::ZwlrDataControlDeviceV1, ()> for State {
                     state.types.remove(&old.id());
                     old.destroy();
                 }
-                state.selections += 1;
                 if let Some(of) = id {
                     state.fetch(conn, &of);
                     state.current = Some(of);
@@ -694,6 +704,17 @@ fn write_all(fd: OwnedFd, bytes: &[u8], limit: Duration) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_first_copy_after_a_quiet_start_is_sent_not_taken_for_the_one_already_there() {
+        let state = State { settled: true, ..State::default() };
+        assert!(!state.is_seed());
+    }
+
+    #[test]
+    fn what_is_already_copied_when_watching_starts_is_not_sent() {
+        assert!(State::default().is_seed());
+    }
+
     use super::*;
 
     #[test]
