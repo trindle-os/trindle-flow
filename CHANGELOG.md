@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.6.8 (20 November 2026)
+
+- The log now says where the pointer left one computer, where it landed on the other, how far it moved there, and the push that sent it back. This is to find why crossing from one screen to the other can need a long move. Nothing else has changed.
+
 ## 2.6.7 (15 November 2026)
 
 - Fixed: on a computer where nothing had been copied since Flow started, the first thing you copied was never sent to the other computer. Copying on the other computer first, then pasting here, made it work. Now the first copy is sent.

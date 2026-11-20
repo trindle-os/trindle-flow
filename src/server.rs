@@ -553,7 +553,7 @@ impl Server {
         let away = Away::new(side, along, peer.layout.clone());
         peer.link.touch();
         peer.link.send(proto::pack_json(proto::ENTER, &json!({"x": away.x as i32, "y": away.y as i32})), Urgency::Needed);
-        self.log(format!("pointer moved to {}", peer.name));
+        self.log(format!("pointer moved to {}: left this screen {:.0}% along its edge, landed at ({}, {}) among screens {:?}", peer.name, along * 100.0, away.x as i32, away.y as i32, peer.layout.bounds()));
         self.away = Some(away);
         self.active = Some(peer);
         self.active_side = Some(side);
@@ -564,6 +564,7 @@ impl Server {
     fn go_home(&mut self, release: bool) {
         let away = self.away.take();
         let Some(peer) = self.active.take() else { return };
+        let report = away.as_ref().map(Away::report).unwrap_or_default();
         peer.link.send(proto::pack(proto::LEAVE, b""), Urgency::Needed);
         let side = self.active_side.take();
         if release {
@@ -571,7 +572,7 @@ impl Server {
                 c.release(side, away.as_ref().map_or(0.5, Away::along_home));
             }
         }
-        self.log(format!("pointer back from {}", peer.name));
+        self.log(format!("pointer back from {}: {report}", peer.name));
         self.publish();
     }
 

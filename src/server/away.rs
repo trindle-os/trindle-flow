@@ -17,6 +17,8 @@ pub(super) struct Away {
     side: Side,
     push: f64,
     push_at: f64,
+    walked: f64,
+    returned_push: f64,
     rest: (f64, f64),
     wheel: [f64; 2],
 }
@@ -24,7 +26,7 @@ pub(super) struct Away {
 impl Away {
     pub(super) fn new(side: Side, along: f64, layout: Layout) -> Away {
         let (x, y) = layout.landing(side, along, INSET);
-        Away { x, y, layout, side, push: 0.0, push_at: 0.0, rest: (0.0, 0.0), wheel: [0.0; 2] }
+        Away { x, y, layout, side, push: 0.0, push_at: 0.0, walked: 0.0, returned_push: 0.0, rest: (0.0, 0.0), wheel: [0.0; 2] }
     }
 
     fn home(&self) -> Side {
@@ -42,6 +44,7 @@ impl Away {
             Side::Top => ((want_y - y).max(0.0), (dx, dy.min(y - self.y))),
         };
         let (pressing, sent) = if at_home_edge { (pressing, sent) } else { (0.0, (dx, dy)) };
+        self.walked += sent.0.hypot(sent.1);
         self.x = x;
         self.y = y;
         let mut events = Vec::new();
@@ -67,6 +70,7 @@ impl Away {
             self.push_at = now;
             self.push += pressing;
             if self.push >= RETURN_PUSH {
+                self.returned_push = self.push;
                 self.push = 0.0;
                 return (events, true);
             }
@@ -74,6 +78,10 @@ impl Away {
             self.push = 0.0;
         }
         (events, false)
+    }
+
+    pub(super) fn report(&self) -> String {
+        format!("at ({:.0}, {:.0}), moved {:.0} points there, push counted {:.0} of {RETURN_PUSH:.0}", self.x, self.y, self.walked, self.returned_push)
     }
 
     fn touching_home(&self) -> bool {
@@ -149,6 +157,20 @@ mod tests {
         for i in 0..10 {
             assert!(!a.step(0.0, -10.0, 10.0 + 2.0 * f64::from(i)).1);
         }
+    }
+
+    #[test]
+    fn the_report_says_how_far_it_moved_and_the_push_that_sent_it_home() {
+        let mut a = Away::new(Side::Right, 0.5, Layout::single(1280, 720));
+        a.step(30.0, 0.0, 0.0);
+        a.step(0.0, 40.0, 0.1);
+        assert!(a.report().contains("moved 70 points"), "{}", a.report());
+        assert!(a.report().contains("push counted 0 of 16"), "{}", a.report());
+        let mut at = 1.0;
+        while !a.step(-6.0, 0.0, at).1 {
+            at += 0.01;
+        }
+        assert!(a.report().contains("push counted 1"), "{}", a.report());
     }
 
     fn laptop() -> Layout {

@@ -31,6 +31,7 @@ struct Shared {
     receiver: Mutex<files::Receiver>,
     clipboard: clipboard::Watcher,
     identity_changed: AtomicBool,
+    walked: std::sync::atomic::AtomicU64,
 }
 
 impl Shared {
@@ -82,6 +83,7 @@ pub fn run(running: Arc<AtomicBool>, log: Log) -> Result<(), crate::Stop> {
         receiver: Mutex::new(files::Receiver::new(log.clone())),
         clipboard,
         identity_changed: AtomicBool::new(false),
+        walked: std::sync::atomic::AtomicU64::new(0),
     });
     let seeker = Arc::new(seeker);
     pass_on(&me, copied_rx);
@@ -436,15 +438,22 @@ fn dispatch(me: &Shared, link: &Arc<Link>, kind: u8, body: Vec<u8>) {
         (cfg.bool(key::SHARE_CLIPBOARD), cfg.bool(key::SHARE_FILES))
     };
     match kind {
-        proto::INPUT => replay(me, &proto::unpack_events(&body)),
+        proto::INPUT => {
+            let events = proto::unpack_events(&body);
+            me.walked.fetch_add(travelled(&events), Ordering::Relaxed);
+            replay(me, &events);
+        }
         proto::ENTER => {
             let at: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
             if let (Some(x), Some(y), Some(remote)) = (at["x"].as_i64(), at["y"].as_i64(), &me.remote) {
                 let screens = screen::recent().unwrap_or_else(|| screen::fallback(&me.cfg()));
                 remote.place(x as i32, y as i32, &screens);
+                me.walked.store(0, Ordering::Relaxed);
+                (me.log)(format!("pointer arrived: placed at ({x}, {y}) among screens {:?}", screens.bounds()));
             }
         }
         proto::LEAVE => {
+            (me.log)(format!("pointer left after moving {} points here", me.walked.swap(0, Ordering::Relaxed)));
             if let Some(remote) = &me.remote {
                 remote.release_all();
             }
@@ -496,6 +505,10 @@ fn unlock_asked(me: &Shared, link: &Arc<Link>, mut body: Vec<u8>) {
     });
 }
 
+fn travelled(events: &[Event]) -> u64 {
+    events.iter().filter(|e| e.0 == proto::EV_REL && (e.1 == proto::REL_X || e.1 == proto::REL_Y)).map(|e| u64::from(e.2.unsigned_abs())).sum()
+}
+
 fn replay(me: &Shared, events: &[Event]) {
     if events.is_empty() {
         return;
@@ -510,6 +523,12 @@ mod tests {
 
     fn hosts(cfg: &Config, found: &[Value]) -> Vec<String> {
         find_hosts(cfg, found).into_iter().map(|(h, _)| h).collect()
+    }
+
+    #[test]
+    fn the_distance_moved_counts_only_the_pointer_and_ignores_direction() {
+        assert_eq!(travelled(&[(proto::EV_REL, proto::REL_X, -3), (proto::EV_REL, proto::REL_Y, 4), (crate::proto::EV_KEY, 30, 1)]), 7);
+        assert_eq!(travelled(&[]), 0);
     }
 
     #[test]
@@ -563,6 +582,7 @@ mod tests {
             receiver: Mutex::new(files::Receiver::new(log.clone())),
             clipboard: clipboard::Watcher::new(mpsc::channel().0, &log),
             identity_changed: AtomicBool::new(false),
+            walked: std::sync::atomic::AtomicU64::new(0),
         };
         assert!(may_greet(&me, None, "10.0.0.2", "bb").unwrap_err().contains("Desk is not the computer it was"));
         assert_eq!(me.cfg().str(key::SERVER_FINGERPRINT), "aa");
